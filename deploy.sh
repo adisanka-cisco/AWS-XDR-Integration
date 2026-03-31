@@ -18,6 +18,10 @@ tf_var() {
   terraform console -var-file=terraform.tfvars <<< "var.$1" | tr -d '"' | tr -d '\r'
 }
 
+has_state() {
+  terraform state show "$1" >/dev/null 2>&1
+}
+
 in_state() {
   terraform state show "$1" >/dev/null 2>&1
 }
@@ -46,6 +50,7 @@ cloudtrail_kms_alias_name="$(tf_var cloudtrail_kms_alias_name)"
 cloudtrail_bucket_name="$(tf_var cloudtrail_bucket_name)"
 vpc_flow_logs_bucket_name="$(tf_var vpc_flow_logs_bucket_name)"
 vpc_id="$(tf_var vpc_id)"
+vpc_flow_log_vpc_count="$(tf_var vpc_flow_log_vpc_count)"
 
 echo "Checking AWS for existing resources..."
 
@@ -86,10 +91,41 @@ if [[ -n "$trail_arn" && "$trail_arn" != "None" ]]; then
   import_if_missing "aws_cloudtrail.this" "$trail_arn"
 fi
 
-flow_log_id="$(aws --region "$aws_region" ec2 describe-flow-logs --query "FlowLogs[?ResourceId=='$vpc_id' && LogDestinationType=='s3' && contains(LogDestination, '$vpc_flow_logs_bucket_name')].FlowLogId | [0]" --output text 2>/dev/null || true)"
-if [[ -n "$flow_log_id" && "$flow_log_id" != "None" ]]; then
-  import_if_missing "aws_flow_log.vpc_flow_logs" "$flow_log_id"
+all_vpc_ids=()
+while IFS= read -r discovered_vpc_id; do
+  all_vpc_ids+=("$discovered_vpc_id")
+done < <(
+  aws --region "$aws_region" ec2 describe-vpcs --query 'Vpcs[].VpcId' --output text 2>/dev/null |
+    tr '\t' '\n' |
+    awk 'NF' |
+    sort
+)
+
+selected_vpc_ids=("$vpc_id")
+for candidate_vpc_id in "${all_vpc_ids[@]}"; do
+  if [[ "$candidate_vpc_id" == "$vpc_id" ]]; then
+    continue
+  fi
+
+  if (( ${#selected_vpc_ids[@]} >= vpc_flow_log_vpc_count )); then
+    break
+  fi
+
+  selected_vpc_ids+=("$candidate_vpc_id")
+done
+
+if has_state "aws_flow_log.vpc_flow_logs" && ! has_state "aws_flow_log.vpc_flow_logs[0]"; then
+  terraform state mv "aws_flow_log.vpc_flow_logs" "aws_flow_log.vpc_flow_logs[0]"
 fi
+
+for index in "${!selected_vpc_ids[@]}"; do
+  current_vpc_id="${selected_vpc_ids[$index]}"
+  flow_log_id="$(aws --region "$aws_region" ec2 describe-flow-logs --query "FlowLogs[?ResourceId=='$current_vpc_id' && LogDestinationType=='s3' && contains(LogDestination, '$vpc_flow_logs_bucket_name')].FlowLogId | [0]" --output text 2>/dev/null || true)"
+
+  if [[ -n "$flow_log_id" && "$flow_log_id" != "None" ]]; then
+    import_if_missing "aws_flow_log.vpc_flow_logs[$index]" "$flow_log_id"
+  fi
+done
 
 echo "Applying Terraform..."
 terraform apply -auto-approve

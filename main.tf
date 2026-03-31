@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/aws"
       version = ">= 5.0"
     }
+    local = {
+      source  = "hashicorp/local"
+      version = ">= 2.0"
+    }
   }
 }
 
@@ -25,6 +29,17 @@ variable "aws_region" {
 variable "vpc_id" {
   description = "ID of the VPC to enable flow logs on"
   type        = string
+}
+
+variable "vpc_flow_log_vpc_count" {
+  description = "How many VPCs should have flow logs enabled, including the primary vpc_id"
+  type        = number
+  default     = 1
+
+  validation {
+    condition     = var.vpc_flow_log_vpc_count >= 1 && var.vpc_flow_log_vpc_count <= 100 && floor(var.vpc_flow_log_vpc_count) == var.vpc_flow_log_vpc_count
+    error_message = "vpc_flow_log_vpc_count must be an integer between 1 and 100."
+  }
 }
 
 variable "role_name" {
@@ -142,6 +157,8 @@ data "aws_vpc" "target" {
   id = var.vpc_id
 }
 
+data "aws_vpcs" "available" {}
+
 ########################################
 # Step 1 - IAM Role and Policy
 ########################################
@@ -166,6 +183,20 @@ data "aws_iam_policy_document" "sca_trust" {
 }
 
 locals {
+  ordered_vpc_ids = concat(
+    [var.vpc_id],
+    sort([
+      for id in data.aws_vpcs.available.ids : id
+      if id != var.vpc_id
+    ])
+  )
+
+  selected_vpc_ids = slice(
+    local.ordered_vpc_ids,
+    0,
+    min(var.vpc_flow_log_vpc_count, length(local.ordered_vpc_ids))
+  )
+
   # This policy is intentionally broad on read access because the Cisco
   # integration needs inventory, logging, and compliance visibility across
   # multiple AWS services.
@@ -436,17 +467,23 @@ resource "aws_s3_bucket_policy" "vpc_flow_logs" {
 }
 
 resource "aws_flow_log" "vpc_flow_logs" {
-  vpc_id               = data.aws_vpc.target.id
+  count                = length(local.selected_vpc_ids)
+  vpc_id               = local.selected_vpc_ids[count.index]
   traffic_type         = var.flow_log_traffic_type
   log_destination_type = "s3"
   log_destination      = aws_s3_bucket.vpc_flow_logs.arn
 
   tags = {
-    Name        = "vpc-flowlogs-${data.aws_vpc.target.id}"
+    Name        = "vpc-flowlogs-${local.selected_vpc_ids[count.index]}"
     ManagedBy   = "Terraform"
     Destination = aws_s3_bucket.vpc_flow_logs.bucket
     Integration = "Cisco Secure Cloud Analytics"
   }
+}
+
+moved {
+  from = aws_flow_log.vpc_flow_logs
+  to   = aws_flow_log.vpc_flow_logs[0]
 }
 
 ########################################
@@ -685,6 +722,19 @@ resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail" {
 # Outputs
 ########################################
 
+locals {
+  python_consumer_outputs = {
+    vpc_flow_logs_s3_path = aws_s3_bucket.vpc_flow_logs.bucket
+    cloudtrail_s3_path    = "${aws_s3_bucket.cloudtrail.bucket}/${var.cloudtrail_prefix}"
+    iam_role_arn          = aws_iam_role.sca_role.arn
+  }
+}
+
+resource "local_file" "python_outputs" {
+  filename = "${path.module}/python_consumer_outputs.json"
+  content  = jsonencode(local.python_consumer_outputs)
+}
+
 output "role_arn" {
   description = "Paste into Secure Cloud Analytics > Settings > Integrations > AWS > Credentials"
   value       = aws_iam_role.sca_role.arn
@@ -716,6 +766,11 @@ output "policy_arn" {
 }
 
 output "target_vpc_id" {
-  description = "Target VPC ID"
+  description = "Primary target VPC ID"
   value       = data.aws_vpc.target.id
+}
+
+output "target_vpc_ids" {
+  description = "All VPC IDs selected for flow log creation"
+  value       = local.selected_vpc_ids
 }

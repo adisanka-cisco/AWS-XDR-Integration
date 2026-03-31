@@ -28,9 +28,12 @@ vpc_id     = "vpc-06393f1da0e049d3e"
 
 You can also override optional values such as:
 
+- `vpc_flow_log_vpc_count`
 - `vpc_flow_logs_bucket_name`
 - `cloudtrail_bucket_name`
 - `external_id`
+
+`vpc_flow_log_vpc_count` defaults to `1`, which keeps the current single VPC behavior. Set it to an integer from `1` to `100` to enable flow logs for additional VPCs in the same region. The configured `vpc_id` is always used first, and any additional VPCs still write to the same flow log bucket.
 
 ## Prerequisites
 
@@ -76,6 +79,20 @@ After `terraform apply`, Terraform prints values you can use in Cisco Secure Clo
 - VPC Flow Log S3 bucket path
 - CloudTrail S3 path
 - CloudTrail bucket name and prefix
+
+Terraform also writes a JSON file for Python consumers:
+
+- `python_consumer_outputs.json`
+
+Example structure:
+
+```json
+{
+  "vpc_flow_logs_s3_path": "xdranalyticsflowlogsbucket",
+  "cloudtrail_s3_path": "aws-cloudtrail-logs-933833866075-1168ac82/cloudtrail",
+  "iam_role_arn": "arn:aws:iam::123456789012:role/obsrvbl-role"
+}
+```
 
 ## Cleanup
 
