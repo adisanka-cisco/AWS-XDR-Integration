@@ -55,7 +55,7 @@ variable "vpc_flow_log_vpc_count" {
 variable "role_name" {
   description = "Name of the IAM role to be assumed by Secure Cloud Analytics"
   type        = string
-  default     = "obsrvbl-role"
+  default     = "obsrvbl-role-custom"
 
   validation {
     condition     = can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", var.role_name))
