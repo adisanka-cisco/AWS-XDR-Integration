@@ -15,6 +15,7 @@ It creates:
 
 - `main.tf`: Terraform resources, variables, and outputs
 - `terraform.tfvars`: Environment-specific variable values
+- `deploy.sh`: Imports matching pre-existing AWS resources into Terraform state, then applies changes
 
 ## Required Inputs
 
@@ -40,7 +41,20 @@ You can also override optional values such as:
 
 ## Usage
 
-From this directory, run:
+From this directory, the safest option is:
+
+```bash
+./deploy.sh
+```
+
+That script:
+
+- Runs `terraform init`
+- Checks AWS for matching pre-existing resources
+- Imports those resources into Terraform state when found
+- Creates only the missing resources
+
+You can also run Terraform manually:
 
 ```bash
 terraform init
