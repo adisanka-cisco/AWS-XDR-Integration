@@ -4,6 +4,15 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+die() {
+  echo "Error: $*" >&2
+  exit 1
+}
+
+require_command() {
+  command -v "$1" >/dev/null 2>&1 || die "Required command '$1' is not installed or not on PATH."
+}
+
 # Expired shell credentials caused earlier runs to fail, so the wrapper always
 # falls back to the working AWS CLI configuration on disk.
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE AWS_DEFAULT_PROFILE
@@ -13,6 +22,13 @@ unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE AWS_
 tmp_tf_cli_config="$(mktemp)"
 trap 'rm -f "$tmp_tf_cli_config"' EXIT
 export TF_CLI_CONFIG_FILE="$tmp_tf_cli_config"
+
+require_command terraform
+require_command aws
+
+[[ -f terraform.tfvars ]] || die "terraform.tfvars was not found in $(pwd)."
+
+aws sts get-caller-identity >/dev/null 2>&1 || die "AWS credentials are not valid. Run 'aws sts get-caller-identity' after refreshing your AWS login."
 
 tf_var() {
   terraform console -var-file=terraform.tfvars <<< "var.$1" | tr -d '"' | tr -d '\r'
@@ -100,6 +116,14 @@ done < <(
     awk 'NF' |
     sort
 )
+
+if [[ ! " ${all_vpc_ids[*]} " =~ " ${vpc_id} " ]]; then
+  die "Primary vpc_id '$vpc_id' was not found in region '$aws_region'."
+fi
+
+if (( vpc_flow_log_vpc_count > ${#all_vpc_ids[@]} )); then
+  die "vpc_flow_log_vpc_count is set to $vpc_flow_log_vpc_count, but only ${#all_vpc_ids[@]} VPCs exist in region '$aws_region'."
+fi
 
 selected_vpc_ids=("$vpc_id")
 for candidate_vpc_id in "${all_vpc_ids[@]}"; do

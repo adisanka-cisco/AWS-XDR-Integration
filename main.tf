@@ -24,11 +24,21 @@ provider "aws" {
 variable "aws_region" {
   description = "AWS region for deployment"
   type        = string
+
+  validation {
+    condition     = length(trimspace(var.aws_region)) > 0
+    error_message = "aws_region must be a non-empty AWS region string such as us-east-1."
+  }
 }
 
 variable "vpc_id" {
   description = "ID of the VPC to enable flow logs on"
   type        = string
+
+  validation {
+    condition     = can(regex("^vpc-[0-9a-f]+$", var.vpc_id))
+    error_message = "vpc_id must look like an AWS VPC ID, for example vpc-0123456789abcdef0."
+  }
 }
 
 variable "vpc_flow_log_vpc_count" {
@@ -46,12 +56,22 @@ variable "role_name" {
   description = "Name of the IAM role to be assumed by Secure Cloud Analytics"
   type        = string
   default     = "obsrvbl-role"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_-]{1,64}$", var.role_name))
+    error_message = "role_name must be 1 to 64 characters and use only valid IAM role name characters."
+  }
 }
 
 variable "policy_name" {
   description = "Name of the managed IAM policy attached to the Secure Cloud Analytics role"
   type        = string
   default     = "CustomXDRAnalyticsRole"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9+=,.@_-]{1,128}$", var.policy_name))
+    error_message = "policy_name must be 1 to 128 characters and use only valid IAM policy name characters."
+  }
 }
 
 variable "trusted_account_id" {
@@ -64,36 +84,66 @@ variable "external_id" {
   description = "Secure Cloud Analytics portal name used as the IAM External ID"
   type        = string
   default     = "cisco-explorcorp-earth"
+
+  validation {
+    condition     = length(trimspace(var.external_id)) > 0
+    error_message = "external_id must be a non-empty string."
+  }
 }
 
 variable "vpc_flow_logs_bucket_name" {
   description = "Name of the S3 bucket used to store VPC Flow Logs"
   type        = string
   default     = "xdranalyticsflowlogsbucket"
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", var.vpc_flow_logs_bucket_name))
+    error_message = "vpc_flow_logs_bucket_name must be a valid S3 bucket name using lowercase letters, numbers, dots, and hyphens."
+  }
 }
 
 variable "cloudtrail_bucket_name" {
   description = "Dedicated S3 bucket name for CloudTrail logs"
   type        = string
   default     = "xdranalyticscloudtrailbucket"
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", var.cloudtrail_bucket_name))
+    error_message = "cloudtrail_bucket_name must be a valid S3 bucket name using lowercase letters, numbers, dots, and hyphens."
+  }
 }
 
 variable "cloudtrail_name" {
   description = "Name of the CloudTrail trail"
   type        = string
   default     = "xdranalyticscloudtrail"
+
+  validation {
+    condition     = length(trimspace(var.cloudtrail_name)) > 0
+    error_message = "cloudtrail_name must be a non-empty string."
+  }
 }
 
 variable "cloudtrail_kms_alias_name" {
   description = "Alias name for the KMS key used by CloudTrail"
   type        = string
   default     = "alias/xdranalyticscloudtrail"
+
+  validation {
+    condition     = can(regex("^alias/[A-Za-z0-9/_-]+$", var.cloudtrail_kms_alias_name))
+    error_message = "cloudtrail_kms_alias_name must start with alias/ and contain only valid KMS alias characters."
+  }
 }
 
 variable "cloudtrail_prefix" {
   description = "S3 key prefix for CloudTrail logs"
   type        = string
   default     = "cloudtrail"
+
+  validation {
+    condition     = length(trimspace(var.cloudtrail_prefix)) > 0 && !startswith(var.cloudtrail_prefix, "/")
+    error_message = "cloudtrail_prefix must be a non-empty relative prefix and must not start with a slash."
+  }
 }
 
 variable "cloudtrail_is_multi_region" {
@@ -112,6 +162,11 @@ variable "flow_log_traffic_type" {
   description = "Traffic type for VPC Flow Logs"
   type        = string
   default     = "ALL"
+
+  validation {
+    condition     = contains(["ACCEPT", "REJECT", "ALL"], var.flow_log_traffic_type)
+    error_message = "flow_log_traffic_type must be one of ACCEPT, REJECT, or ALL."
+  }
 }
 
 variable "lifecycle_rule_name" {
