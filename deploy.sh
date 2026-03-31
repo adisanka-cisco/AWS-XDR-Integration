@@ -4,8 +4,12 @@ set -euo pipefail
 
 cd "$(dirname "$0")"
 
+# Expired shell credentials caused earlier runs to fail, so the wrapper always
+# falls back to the working AWS CLI configuration on disk.
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE AWS_DEFAULT_PROFILE
 
+# Ignore any machine-wide Terraform mirror override and use a temporary empty
+# CLI config so provider installation behaves consistently.
 tmp_tf_cli_config="$(mktemp)"
 trap 'rm -f "$tmp_tf_cli_config"' EXIT
 export TF_CLI_CONFIG_FILE="$tmp_tf_cli_config"
@@ -45,6 +49,8 @@ vpc_id="$(tf_var vpc_id)"
 
 echo "Checking AWS for existing resources..."
 
+# Import matching AWS resources into Terraform state before apply so repeated
+# runs adopt what already exists instead of trying to recreate it.
 if aws iam get-role --role-name "$role_name" >/dev/null 2>&1; then
   import_if_missing "aws_iam_role.sca_role" "$role_name"
 fi

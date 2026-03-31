@@ -166,6 +166,9 @@ data "aws_iam_policy_document" "sca_trust" {
 }
 
 locals {
+  # This policy is intentionally broad on read access because the Cisco
+  # integration needs inventory, logging, and compliance visibility across
+  # multiple AWS services.
   custom_xdr_analytics_role_policy = {
     Version = "2012-10-17"
     Statement = [
@@ -310,6 +313,9 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "vpc_flow_logs" {
 }
 
 data "aws_iam_policy_document" "vpc_flow_logs_bucket_policy" {
+  # The bucket policy has two jobs:
+  # 1. allow Cisco-managed source IPs to read delivered flow logs
+  # 2. allow AWS log delivery to write the flow logs into the bucket
   statement {
     sid    = "AllowBucketAccessFromSpecificIPs"
     effect = "Allow"
@@ -477,6 +483,8 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
 }
 
 data "aws_iam_policy_document" "cloudtrail_kms" {
+  # CloudTrail must be able to generate data keys with the same KMS key
+  # that Terraform manages or imports for this deployment.
   statement {
     sid    = "EnableRootPermissions"
     effect = "Allow"
@@ -611,6 +619,8 @@ resource "aws_s3_bucket_policy" "cloudtrail" {
 resource "aws_cloudtrail" "this" {
   depends_on = [aws_s3_bucket_policy.cloudtrail]
 
+  # This trail captures management events and writes them to the S3 bucket
+  # and KMS key defined above, whether those resources were created or adopted.
   name                          = var.cloudtrail_name
   s3_bucket_name                = aws_s3_bucket.cloudtrail.id
   s3_key_prefix                 = var.cloudtrail_prefix
@@ -641,6 +651,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "vpc_flow_logs" {
   bucket = aws_s3_bucket.vpc_flow_logs.id
 
   rule {
+    # Only noncurrent object versions expire automatically. Current log objects
+    # remain available until a separate retention rule is added.
     id     = var.lifecycle_rule_name
     status = "Enabled"
 
@@ -656,6 +668,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail" {
   bucket = aws_s3_bucket.cloudtrail.id
 
   rule {
+    # Only noncurrent object versions expire automatically. Current log objects
+    # remain available until a separate retention rule is added.
     id     = var.lifecycle_rule_name
     status = "Enabled"
 
