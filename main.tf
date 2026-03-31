@@ -169,6 +169,31 @@ variable "flow_log_traffic_type" {
   }
 }
 
+variable "flow_logs_cloudwatch_log_group_name" {
+  description = "CloudWatch Logs group name to support Cisco-managed VPC Flow Log onboarding"
+  type        = string
+  default     = "/aws/vpc/flowlogs/cisco-secure-cloud-analytics"
+
+  validation {
+    condition     = length(trimspace(var.flow_logs_cloudwatch_log_group_name)) > 0
+    error_message = "flow_logs_cloudwatch_log_group_name must be a non-empty CloudWatch Logs group name."
+  }
+}
+
+variable "flow_logs_cloudwatch_retention_in_days" {
+  description = "Retention period for the CloudWatch Logs group used during Cisco-managed VPC Flow Log onboarding"
+  type        = number
+  default     = 30
+
+  validation {
+    condition = contains([
+      1, 3, 5, 7, 14, 30, 60, 90, 120, 150, 180, 365, 400, 545, 731, 1096,
+      1827, 2192, 2557, 2922, 3288, 3653
+    ], var.flow_logs_cloudwatch_retention_in_days)
+    error_message = "flow_logs_cloudwatch_retention_in_days must be a valid CloudWatch Logs retention value."
+  }
+}
+
 variable "lifecycle_rule_name" {
   description = "Lifecycle rule name applied to both buckets"
   type        = string
@@ -235,6 +260,34 @@ data "aws_iam_policy_document" "sca_trust" {
       values   = [var.external_id]
     }
   }
+
+  # Cisco can assume this role to manage onboarding, and the VPC Flow Logs
+  # service can also assume it when Cisco creates a CloudWatch-backed flow log
+  # and passes this role as the delivery role.
+  statement {
+    sid     = "AllowVPCFlowLogsServiceAssumeRole"
+    effect  = "Allow"
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["vpc-flow-logs.amazonaws.com"]
+    }
+
+    condition {
+      test     = "StringEquals"
+      variable = "aws:SourceAccount"
+      values   = [data.aws_caller_identity.current.account_id]
+    }
+
+    condition {
+      test     = "ArnLike"
+      variable = "aws:SourceArn"
+      values = [
+        "arn:${data.aws_partition.current.partition}:ec2:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:vpc-flow-log/*"
+      ]
+    }
+  }
 }
 
 locals {
@@ -294,6 +347,41 @@ locals {
         ]
         Effect   = "Allow"
         Resource = "*"
+      },
+      {
+        Sid = "ManageVpcFlowLogs"
+        Action = [
+          "ec2:CreateFlowLogs",
+          "ec2:DeleteFlowLogs",
+          "ec2:DescribeFlowLogs"
+        ]
+        Effect   = "Allow"
+        Resource = "*"
+      },
+      {
+        Sid = "PublishVpcFlowLogsToCloudWatch"
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogGroups",
+          "logs:DescribeLogStreams"
+        ]
+        Effect   = "Allow"
+        Resource = "*"
+      },
+      {
+        Sid = "PassRoleForVpcFlowLogs"
+        Action = [
+          "iam:PassRole"
+        ]
+        Effect   = "Allow"
+        Resource = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${var.role_name}"
+        Condition = {
+          StringEquals = {
+            "iam:PassedToService" = "vpc-flow-logs.amazonaws.com"
+          }
+        }
       },
       {
         Sid = "CloudCompliance"
@@ -363,6 +451,18 @@ resource "aws_iam_policy" "sca_policy" {
 resource "aws_iam_role_policy_attachment" "sca_policy_attach" {
   role       = aws_iam_role.sca_role.name
   policy_arn = aws_iam_policy.sca_policy.arn
+}
+
+resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
+  name              = var.flow_logs_cloudwatch_log_group_name
+  retention_in_days = var.flow_logs_cloudwatch_retention_in_days
+
+  tags = {
+    Name        = var.flow_logs_cloudwatch_log_group_name
+    ManagedBy   = "Terraform"
+    Purpose     = "Cisco Secure Cloud Analytics VPC Flow Log Onboarding"
+    Integration = "Cisco Secure Cloud Analytics"
+  }
 }
 
 ########################################
@@ -779,9 +879,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail" {
 
 locals {
   python_consumer_outputs = {
-    vpc_flow_logs_s3_path = aws_s3_bucket.vpc_flow_logs.bucket
-    cloudtrail_s3_path    = "${aws_s3_bucket.cloudtrail.bucket}/${var.cloudtrail_prefix}"
-    iam_role_arn          = aws_iam_role.sca_role.arn
+    vpc_flow_logs_s3_path                 = aws_s3_bucket.vpc_flow_logs.bucket
+    vpc_flow_logs_cloudwatch_log_group    = aws_cloudwatch_log_group.vpc_flow_logs.name
+    cloudtrail_s3_path                    = "${aws_s3_bucket.cloudtrail.bucket}/${var.cloudtrail_prefix}"
+    iam_role_arn                          = aws_iam_role.sca_role.arn
   }
 }
 
@@ -798,6 +899,11 @@ output "role_arn" {
 output "vpc_flow_log_s3_path" {
   description = "Paste into Secure Cloud Analytics > AWS > VPC Flow Logs > S3 Path"
   value       = aws_s3_bucket.vpc_flow_logs.bucket
+}
+
+output "vpc_flow_log_cloudwatch_log_group_name" {
+  description = "CloudWatch Logs group available if Cisco onboarding verifies or creates CloudWatch-backed flow logs"
+  value       = aws_cloudwatch_log_group.vpc_flow_logs.name
 }
 
 output "cloudtrail_s3_path" {
