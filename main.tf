@@ -52,6 +52,29 @@ variable "vpc_flow_log_vpc_count" {
   }
 }
 
+variable "additional_vpc_ids" {
+  description = "Optional explicit list of additional VPC IDs to enable flow logs on, in addition to vpc_id"
+  type        = list(string)
+  default     = []
+
+  validation {
+    condition = alltrue([
+      for id in var.additional_vpc_ids : can(regex("^vpc-[0-9a-f]+$", id))
+    ])
+    error_message = "additional_vpc_ids must contain only valid AWS VPC IDs, for example vpc-0123456789abcdef0."
+  }
+
+  validation {
+    condition     = length(distinct(var.additional_vpc_ids)) == length(var.additional_vpc_ids)
+    error_message = "additional_vpc_ids must not contain duplicates."
+  }
+
+  validation {
+    condition     = length(var.additional_vpc_ids) <= 99
+    error_message = "additional_vpc_ids can contain at most 99 VPC IDs because the primary vpc_id is always included."
+  }
+}
+
 variable "role_name" {
   description = "Name of the IAM role to be assumed by Secure Cloud Analytics"
   type        = string
@@ -291,6 +314,11 @@ data "aws_iam_policy_document" "sca_trust" {
 }
 
 locals {
+  explicit_additional_vpc_ids = [
+    for id in var.additional_vpc_ids : id
+    if id != var.vpc_id
+  ]
+
   ordered_vpc_ids = concat(
     [var.vpc_id],
     sort([
@@ -299,7 +327,10 @@ locals {
     ])
   )
 
-  selected_vpc_ids = slice(
+  selected_vpc_ids = length(local.explicit_additional_vpc_ids) > 0 ? concat(
+    [var.vpc_id],
+    local.explicit_additional_vpc_ids
+  ) : slice(
     local.ordered_vpc_ids,
     0,
     min(var.vpc_flow_log_vpc_count, length(local.ordered_vpc_ids))
@@ -1002,6 +1033,7 @@ locals {
       bucket_name          = aws_s3_bucket.vpc_flow_logs.bucket
       s3_path              = aws_s3_bucket.vpc_flow_logs.bucket
       cloudwatch_log_group = aws_cloudwatch_log_group.vpc_flow_logs.name
+      vpc_ids              = local.selected_vpc_ids
     }
   }
 }

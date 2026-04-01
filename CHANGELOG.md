@@ -6,4 +6,5 @@
 - Added support for Cisco-managed VPC flow log onboarding, including CloudWatch Logs permissions and helper log group output.
 - Expanded IAM access for S3-backed flow log and CloudTrail validation, including S3 object reads and CloudTrail KMS decrypt permissions.
 - Reorganized `python_consumer_outputs.json` into intuitive `aws_credentials`, `cloudtrail`, and `vpc_flow_logs` sections for Cisco copy/paste workflows.
+- Added an explicit `additional_vpc_ids` input so multi-VPC onboarding is configured by listing exact VPC IDs instead of relying only on auto-selection by count.
 - Improved destroy behavior so versioned S3 buckets are emptied and deleted automatically during `terraform destroy`.

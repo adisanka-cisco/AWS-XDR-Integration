@@ -25,18 +25,27 @@ Update `terraform.tfvars` with values for your environment:
 ```hcl
 aws_region = "us-east-1"
 vpc_id     = "vpc-06393f1da0e049d3e"
+
+# Optional: explicitly add more VPCs for flow logs
+# additional_vpc_ids = [
+#   "vpc-0123456789abcdef0",
+#   "vpc-0fedcba9876543210"
+# ]
 ```
 
 You can also override optional values such as:
 
 - `role_name`
+- `additional_vpc_ids`
 - `vpc_flow_log_vpc_count`
 - `vpc_flow_logs_bucket_name`
 - `cloudtrail_bucket_name`
 - `external_id`
 - `flow_logs_cloudwatch_log_group_name`
 
-`vpc_flow_log_vpc_count` defaults to `1`, which keeps the current single VPC behavior. Set it to an integer from `1` to `100` to enable flow logs for additional VPCs in the same region. The configured `vpc_id` is always used first, and any additional VPCs still write to the same flow log bucket.
+For multiple VPCs, the clearest option is to set `additional_vpc_ids` in [terraform.tfvars](/Users/bqamar/work-dev/AWS-XDR-integration/terraform.tfvars). Terraform always includes the primary `vpc_id`, then adds every VPC listed in `additional_vpc_ids`, and all of them write to the same flow log bucket.
+
+`vpc_flow_log_vpc_count` still defaults to `1`, which keeps the current single-VPC behavior. If `additional_vpc_ids` is left empty, you can set `vpc_flow_log_vpc_count` to an integer from `1` to `100` to auto-select more VPCs from the same region. When `additional_vpc_ids` is provided, that explicit list takes precedence.
 
 ## Prerequisites
 
@@ -105,7 +114,10 @@ Example structure:
   "vpc_flow_logs": {
     "bucket_name": "xdranalyticsflowlogsbucket",
     "s3_path": "xdranalyticsflowlogsbucket",
-    "cloudwatch_log_group": "/aws/vpc/flowlogs/cisco-secure-cloud-analytics"
+    "cloudwatch_log_group": "/aws/vpc/flowlogs/cisco-secure-cloud-analytics",
+    "vpc_ids": [
+      "vpc-06393f1da0e049d3e"
+    ]
   }
 }
 ```
