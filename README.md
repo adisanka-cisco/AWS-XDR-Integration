@@ -79,10 +79,10 @@ terraform apply -auto-approve
 After `terraform apply`, Terraform prints values you can use in Cisco Secure Cloud Analytics, including:
 
 - IAM role ARN
-- VPC Flow Log S3 bucket path
+- VPC Flow Logs bucket name
 - VPC Flow Log CloudWatch Logs group name
-- CloudTrail S3 path
-- CloudTrail bucket name and prefix
+- CloudTrail Logs bucket name
+- CloudTrail Logs bucket path
 
 Terraform also writes a JSON file for Python consumers:
 
@@ -92,10 +92,21 @@ Example structure:
 
 ```json
 {
-  "vpc_flow_logs_s3_path": "xdranalyticsflowlogsbucket",
-  "vpc_flow_logs_cloudwatch_log_group": "/aws/vpc/flowlogs/cisco-secure-cloud-analytics",
-  "cloudtrail_s3_path": "aws-cloudtrail-logs-933833866075-1168ac82/cloudtrail",
-  "iam_role_arn": "arn:aws:iam::123456789012:role/obsrvbl-role-custom"
+  "aws_credentials": {
+    "iam_role_arn": "arn:aws:iam::123456789012:role/obsrvbl-role-custom",
+    "external_id": "cisco-explorcorp-earth"
+  },
+  "cloudtrail": {
+    "logs_bucket_name": "aws-cloudtrail-logs-933833866075-1168ac82",
+    "logs_bucket_path": "aws-cloudtrail-logs-933833866075-1168ac82/cloudtrail",
+    "s3_path": "aws-cloudtrail-logs-933833866075-1168ac82/cloudtrail",
+    "prefix": "cloudtrail"
+  },
+  "vpc_flow_logs": {
+    "bucket_name": "xdranalyticsflowlogsbucket",
+    "s3_path": "xdranalyticsflowlogsbucket",
+    "cloudwatch_log_group": "/aws/vpc/flowlogs/cisco-secure-cloud-analytics"
+  }
 }
 ```
 
@@ -106,3 +117,7 @@ To remove the provisioned resources:
 ```bash
 terraform destroy
 ```
+
+The S3 buckets are configured with `force_destroy = true`, so Terraform will
+remove bucket objects and versions during destroy instead of requiring manual
+bucket cleanup.

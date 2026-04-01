@@ -340,8 +340,11 @@ locals {
       {
         Action = [
           "logs:Describe*",
+          "logs:Get*",
           "logs:GetLogEvents",
           "logs:FilterLogEvents",
+          "logs:ListTagsForResource",
+          "logs:DescribeResourcePolicies",
           "logs:PutSubscriptionFilter",
           "logs:DeleteSubscriptionFilter"
         ]
@@ -382,6 +385,42 @@ locals {
             "iam:PassedToService" = "vpc-flow-logs.amazonaws.com"
           }
         }
+      },
+      {
+        Sid = "ReadVpcFlowLogBuckets"
+        Action = [
+          "s3:GetBucketLocation",
+          "s3:ListBucket",
+          "s3:ListBucketVersions"
+        ]
+        Effect = "Allow"
+        Resource = [
+          aws_s3_bucket.vpc_flow_logs.arn,
+          aws_s3_bucket.cloudtrail.arn
+        ]
+      },
+      {
+        Sid = "ReadVpcFlowLogObjects"
+        Action = [
+          "s3:GetObject",
+          "s3:GetObjectVersion"
+        ]
+        Effect = "Allow"
+        Resource = [
+          "${aws_s3_bucket.vpc_flow_logs.arn}/*",
+          "${aws_s3_bucket.cloudtrail.arn}/*"
+        ]
+      },
+      {
+        Sid = "ReadCloudTrailKmsKey"
+        Action = [
+          "kms:Decrypt",
+          "kms:DescribeKey"
+        ]
+        Effect = "Allow"
+        Resource = [
+          aws_kms_key.cloudtrail.arn
+        ]
       },
       {
         Sid = "CloudCompliance"
@@ -470,7 +509,35 @@ resource "aws_cloudwatch_log_group" "vpc_flow_logs" {
 ########################################
 
 resource "aws_s3_bucket" "vpc_flow_logs" {
-  bucket = var.vpc_flow_logs_bucket_name
+  bucket        = var.vpc_flow_logs_bucket_name
+  force_destroy = true
+
+  # Flow log delivery can write late-arriving objects during teardown. Empty
+  # all object versions immediately before bucket deletion so destroy succeeds
+  # without a manual cleanup step.
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = ["/bin/bash", "-lc"]
+    command     = <<-EOT
+      set -euo pipefail
+      unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE AWS_DEFAULT_PROFILE
+      bucket="${self.bucket}"
+
+      while true; do
+        tmp="$(mktemp)"
+        aws s3api list-object-versions --bucket "$bucket" --output json \
+          | jq '{Objects: (((.Versions // []) + (.DeleteMarkers // []))[:1000] | map({Key, VersionId})), Quiet: true}' > "$tmp"
+
+        if [ "$(jq '.Objects | length' "$tmp")" -eq 0 ]; then
+          rm -f "$tmp"
+          break
+        fi
+
+        aws s3api delete-objects --bucket "$bucket" --delete "file://$tmp" >/dev/null
+        rm -f "$tmp"
+      done
+    EOT
+  }
 
   tags = {
     Name        = var.vpc_flow_logs_bucket_name
@@ -646,7 +713,32 @@ moved {
 ########################################
 
 resource "aws_s3_bucket" "cloudtrail" {
-  bucket = var.cloudtrail_bucket_name
+  bucket        = var.cloudtrail_bucket_name
+  force_destroy = true
+
+  provisioner "local-exec" {
+    when        = destroy
+    interpreter = ["/bin/bash", "-lc"]
+    command     = <<-EOT
+      set -euo pipefail
+      unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE AWS_DEFAULT_PROFILE
+      bucket="${self.bucket}"
+
+      while true; do
+        tmp="$(mktemp)"
+        aws s3api list-object-versions --bucket "$bucket" --output json \
+          | jq '{Objects: (((.Versions // []) + (.DeleteMarkers // []))[:1000] | map({Key, VersionId})), Quiet: true}' > "$tmp"
+
+        if [ "$(jq '.Objects | length' "$tmp")" -eq 0 ]; then
+          rm -f "$tmp"
+          break
+        fi
+
+        aws s3api delete-objects --bucket "$bucket" --delete "file://$tmp" >/dev/null
+        rm -f "$tmp"
+      done
+    EOT
+  }
 
   tags = {
     Name        = var.cloudtrail_bucket_name
@@ -721,6 +813,23 @@ data "aws_iam_policy_document" "cloudtrail_kms" {
         "arn:${data.aws_partition.current.partition}:cloudtrail:*:${data.aws_caller_identity.current.account_id}:trail/*"
       ]
     }
+  }
+
+  statement {
+    sid    = "AllowCiscoRoleToDecryptCloudTrailLogs"
+    effect = "Allow"
+
+    principals {
+      type        = "AWS"
+      identifiers = [aws_iam_role.sca_role.arn]
+    }
+
+    actions = [
+      "kms:Decrypt",
+      "kms:DescribeKey"
+    ]
+
+    resources = ["*"]
   }
 }
 
@@ -879,10 +988,21 @@ resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail" {
 
 locals {
   python_consumer_outputs = {
-    vpc_flow_logs_s3_path                 = aws_s3_bucket.vpc_flow_logs.bucket
-    vpc_flow_logs_cloudwatch_log_group    = aws_cloudwatch_log_group.vpc_flow_logs.name
-    cloudtrail_s3_path                    = "${aws_s3_bucket.cloudtrail.bucket}/${var.cloudtrail_prefix}"
-    iam_role_arn                          = aws_iam_role.sca_role.arn
+    aws_credentials = {
+      iam_role_arn = aws_iam_role.sca_role.arn
+      external_id  = var.external_id
+    }
+    cloudtrail = {
+      logs_bucket_name = aws_s3_bucket.cloudtrail.bucket
+      logs_bucket_path = "${aws_s3_bucket.cloudtrail.bucket}/${var.cloudtrail_prefix}"
+      s3_path          = "${aws_s3_bucket.cloudtrail.bucket}/${var.cloudtrail_prefix}"
+      prefix           = var.cloudtrail_prefix
+    }
+    vpc_flow_logs = {
+      bucket_name          = aws_s3_bucket.vpc_flow_logs.bucket
+      s3_path              = aws_s3_bucket.vpc_flow_logs.bucket
+      cloudwatch_log_group = aws_cloudwatch_log_group.vpc_flow_logs.name
+    }
   }
 }
 
