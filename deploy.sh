@@ -30,6 +30,8 @@ require_command aws
 
 aws sts get-caller-identity >/dev/null 2>&1 || die "AWS credentials are not valid. Run 'aws sts get-caller-identity' after refreshing your AWS login."
 
+# Read a Terraform variable the same way Terraform itself will see it. This
+# keeps the wrapper aligned with terraform.tfvars without duplicating defaults.
 tf_var() {
   terraform console -var-file=terraform.tfvars <<< "var.$1" | tr -d '"' | tr -d '\r'
 }
@@ -65,6 +67,8 @@ cloudtrail_name="$(tf_var cloudtrail_name)"
 cloudtrail_kms_alias_name="$(tf_var cloudtrail_kms_alias_name)"
 cloudtrail_bucket_name="$(tf_var cloudtrail_bucket_name)"
 vpc_flow_logs_bucket_name="$(tf_var vpc_flow_logs_bucket_name)"
+# vpc_ids is optional. When unset, Terraform discovers VPCs automatically, so
+# the wrapper mirrors that same behavior for import/adoption.
 raw_vpc_ids="$(terraform console -var-file=terraform.tfvars <<< "jsonencode(var.vpc_ids)" | tr -d '\r' | jq -r '.')"
 
 echo "Checking AWS for existing resources..."
@@ -121,6 +125,8 @@ if (( ${#all_vpc_ids[@]} == 0 )); then
 fi
 
 selected_vpc_ids=()
+# Use the explicit override list when provided; otherwise adopt the default
+# Terraform behavior of selecting all discoverable VPCs, capped at 100.
 if [[ "$raw_vpc_ids" != "[]" ]]; then
   while IFS= read -r configured_vpc_id; do
     selected_vpc_ids+=("$configured_vpc_id")
@@ -139,6 +145,8 @@ if has_state "aws_flow_log.vpc_flow_logs" && ! has_state "aws_flow_log.vpc_flow_
   terraform state mv "aws_flow_log.vpc_flow_logs" "aws_flow_log.vpc_flow_logs[0]"
 fi
 
+# Import matching flow logs by index so a rerun can adopt existing AWS-side
+# resources instead of trying to create duplicate flow logs for the same VPCs.
 for index in "${!selected_vpc_ids[@]}"; do
   current_vpc_id="${selected_vpc_ids[$index]}"
   flow_log_id="$(aws --region "$aws_region" ec2 describe-flow-logs --query "FlowLogs[?ResourceId=='$current_vpc_id' && LogDestinationType=='s3' && contains(LogDestination, '$vpc_flow_logs_bucket_name')].FlowLogId | [0]" --output text 2>/dev/null || true)"
