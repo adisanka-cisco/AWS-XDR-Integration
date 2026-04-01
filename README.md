@@ -106,14 +106,14 @@ Example structure:
     "external_id": "cisco-explorcorp-earth"
   },
   "cloudtrail": {
-    "logs_bucket_name": "aws-cloudtrail-logs-933833866075-1168ac82",
-    "logs_bucket_path": "aws-cloudtrail-logs-933833866075-1168ac82/cloudtrail",
-    "s3_path": "aws-cloudtrail-logs-933833866075-1168ac82/cloudtrail",
+    "logs_bucket_name": "example-cloudtrail-logs-bucket",
+    "logs_bucket_path": "example-cloudtrail-logs-bucket/cloudtrail",
+    "s3_path": "example-cloudtrail-logs-bucket/cloudtrail",
     "prefix": "cloudtrail"
   },
   "vpc_flow_logs": {
-    "bucket_name": "xdranalyticsflowlogsbucket",
-    "s3_path": "xdranalyticsflowlogsbucket",
+    "bucket_name": "example-vpc-flow-logs-bucket",
+    "s3_path": "example-vpc-flow-logs-bucket",
     "cloudwatch_log_group": "/aws/vpc/flowlogs/cisco-secure-cloud-analytics",
     "vpc_ids": [
       "vpc-06393f1da0e049d3e"
