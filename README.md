@@ -1,8 +1,10 @@
 # AWS XDR Integration
 
-This Terraform project provisions the AWS-side resources needed for a Cisco Secure Cloud Analytics / XDR integration.
+This Terraform project provisions the AWS resources required for a Cisco Secure Cloud Analytics / XDR integration.
 
-It creates:
+## Overview
+
+The configuration provisions:
 
 - An IAM role and policy that Cisco Secure Cloud Analytics can assume
 - A CloudWatch Logs group and supporting IAM permissions for Cisco-managed VPC Flow Log onboarding
@@ -14,13 +16,13 @@ It creates:
 
 ## Files
 
-- `main.tf`: Terraform resources, variables, and outputs
-- `terraform.tfvars`: Environment-specific variable values
-- `deploy.sh`: Imports matching pre-existing AWS resources into Terraform state, then applies changes
+- `main.tf` contains Terraform resources, variables, and outputs.
+- `terraform.tfvars` contains environment-specific values.
+- `deploy.sh` imports matching pre-existing AWS resources into Terraform state and then applies changes.
 
-## Required Inputs
+## Configuration
 
-Update `terraform.tfvars` with values for your environment:
+Set the required values in `terraform.tfvars`:
 
 ```hcl
 aws_region = "us-east-1"
@@ -33,7 +35,7 @@ vpc_id     = "vpc-06393f1da0e049d3e"
 # ]
 ```
 
-You can also override optional values such as:
+Optional overrides include:
 
 - `role_name`
 - `additional_vpc_ids`
@@ -43,28 +45,28 @@ You can also override optional values such as:
 - `external_id`
 - `flow_logs_cloudwatch_log_group_name`
 
-For multiple VPCs, the clearest option is to set `additional_vpc_ids` in [terraform.tfvars](/Users/bqamar/work-dev/AWS-XDR-integration/terraform.tfvars). Terraform always includes the primary `vpc_id`, then adds every VPC listed in `additional_vpc_ids`, and all of them write to the same flow log bucket.
+For multi-VPC onboarding, the clearest option is to set `additional_vpc_ids` in [terraform.tfvars](/Users/bqamar/work-dev/AWS-XDR-integration/terraform.tfvars). Terraform always includes the primary `vpc_id`, then adds each VPC listed in `additional_vpc_ids`. All selected VPCs write to the same flow log bucket.
 
-`vpc_flow_log_vpc_count` still defaults to `1`, which keeps the current single-VPC behavior. If `additional_vpc_ids` is left empty, you can set `vpc_flow_log_vpc_count` to an integer from `1` to `100` to auto-select more VPCs from the same region. When `additional_vpc_ids` is provided, that explicit list takes precedence.
+`vpc_flow_log_vpc_count` still defaults to `1`, which preserves single-VPC behavior. If `additional_vpc_ids` is empty, you can set `vpc_flow_log_vpc_count` to an integer from `1` to `100` to auto-select more VPCs from the same region. When `additional_vpc_ids` is provided, that explicit list takes precedence.
 
 ## Prerequisites
 
 - Terraform installed
 - AWS credentials configured for the target account
-- An existing VPC in the target region
+- At least one existing VPC in the target region
 - Globally unique S3 bucket names
 
-## Usage
+## Deployment
 
-From this directory, the safest option is:
+From this directory, the recommended command is:
 
 ```bash
 ./deploy.sh
 ```
 
-That script:
+`deploy.sh` will:
 
-- Runs `terraform init`
+- Run `terraform init`
 - Checks AWS for matching pre-existing resources
 - Imports those resources into Terraform state when found
 - Creates only the missing resources
@@ -85,7 +87,7 @@ terraform apply -auto-approve
 
 ## Outputs
 
-After `terraform apply`, Terraform prints values you can use in Cisco Secure Cloud Analytics, including:
+After `terraform apply`, Terraform prints values commonly needed in Cisco Secure Cloud Analytics, including:
 
 - IAM role ARN
 - VPC Flow Logs bucket name
@@ -93,9 +95,7 @@ After `terraform apply`, Terraform prints values you can use in Cisco Secure Clo
 - CloudTrail Logs bucket name
 - CloudTrail Logs bucket path
 
-Terraform also writes a JSON file for Python consumers:
-
-- `python_consumer_outputs.json`
+Terraform also writes `python_consumer_outputs.json`.
 
 Example structure:
 
@@ -124,8 +124,7 @@ Example structure:
 
 ## Cleanup
 
-Warning: `terraform destroy` is a destructive action. Use it with caution, and
-only when you intend to permanently remove the provisioned AWS resources.
+Warning: `terraform destroy` is destructive. Use it only when you intend to permanently remove the provisioned AWS resources.
 
 To remove the provisioned resources:
 
