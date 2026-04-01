@@ -330,170 +330,45 @@ locals {
   selected_vpc_ids = length(local.explicit_additional_vpc_ids) > 0 ? concat(
     [var.vpc_id],
     local.explicit_additional_vpc_ids
-  ) : slice(
+    ) : slice(
     local.ordered_vpc_ids,
     0,
     min(var.vpc_flow_log_vpc_count, length(local.ordered_vpc_ids))
   )
 
-  # This policy is intentionally broad on read access because the Cisco
-  # integration needs inventory, logging, and compliance visibility across
-  # multiple AWS services.
-  custom_xdr_analytics_role_policy = {
-    Version = "2012-10-17"
-    Statement = [
-      {
-        Action = [
-          "autoscaling:Describe*",
-          "cloudtrail:LookupEvents",
-          "cloudwatch:Get*",
-          "cloudwatch:List*",
-          "ec2:Describe*",
-          "ecs:List*",
-          "ecs:Describe*",
-          "elasticache:Describe*",
-          "elasticache:List*",
-          "elasticloadbalancing:Describe*",
-          "guardduty:Get*",
-          "guardduty:List*",
-          "iam:Get*",
-          "iam:List*",
-          "inspector:*",
-          "rds:Describe*",
-          "rds:List*",
-          "redshift:Describe*",
-          "workspaces:Describe*",
-          "route53:List*"
-        ]
-        Effect   = "Allow"
-        Resource = "*"
-      },
-      {
-        Action = [
-          "logs:Describe*",
-          "logs:Get*",
-          "logs:GetLogEvents",
-          "logs:FilterLogEvents",
-          "logs:ListTagsForResource",
-          "logs:DescribeResourcePolicies",
-          "logs:PutSubscriptionFilter",
-          "logs:DeleteSubscriptionFilter"
-        ]
-        Effect   = "Allow"
-        Resource = "*"
-      },
-      {
-        Sid = "ManageVpcFlowLogs"
-        Action = [
-          "ec2:CreateFlowLogs",
-          "ec2:DeleteFlowLogs",
-          "ec2:DescribeFlowLogs"
-        ]
-        Effect   = "Allow"
-        Resource = "*"
-      },
-      {
-        Sid = "PublishVpcFlowLogsToCloudWatch"
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents",
-          "logs:DescribeLogGroups",
-          "logs:DescribeLogStreams"
-        ]
-        Effect   = "Allow"
-        Resource = "*"
-      },
-      {
-        Sid = "PassRoleForVpcFlowLogs"
-        Action = [
-          "iam:PassRole"
-        ]
-        Effect   = "Allow"
-        Resource = "arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:role/${var.role_name}"
-        Condition = {
-          StringEquals = {
-            "iam:PassedToService" = "vpc-flow-logs.amazonaws.com"
-          }
-        }
-      },
-      {
-        Sid = "ReadVpcFlowLogBuckets"
-        Action = [
-          "s3:GetBucketLocation",
-          "s3:ListBucket",
-          "s3:ListBucketVersions"
-        ]
-        Effect = "Allow"
-        Resource = [
-          aws_s3_bucket.vpc_flow_logs.arn,
-          aws_s3_bucket.cloudtrail.arn
-        ]
-      },
-      {
-        Sid = "ReadVpcFlowLogObjects"
-        Action = [
-          "s3:GetObject",
-          "s3:GetObjectVersion"
-        ]
-        Effect = "Allow"
-        Resource = [
-          "${aws_s3_bucket.vpc_flow_logs.arn}/*",
-          "${aws_s3_bucket.cloudtrail.arn}/*"
-        ]
-      },
-      {
-        Sid = "ReadCloudTrailKmsKey"
-        Action = [
-          "kms:Decrypt",
-          "kms:DescribeKey"
-        ]
-        Effect = "Allow"
-        Resource = [
-          aws_kms_key.cloudtrail.arn
-        ]
-      },
-      {
-        Sid = "CloudCompliance"
-        Action = [
-          "access-analyzer:ListAnalyzers",
-          "cloudtrail:DescribeTrails",
-          "cloudtrail:GetEventSelectors",
-          "cloudtrail:GetTrailStatus",
-          "cloudtrail:ListTags",
-          "cloudwatch:DescribeAlarmsForMetric",
-          "config:Get*",
-          "config:Describe*",
-          "ec2:GetEbsEncryptionByDefault",
-          "iam:GenerateCredentialReport",
-          "kms:GetKeyRotationStatus",
-          "kms:ListKeys",
-          "logs:DescribeMetricFilters",
-          "organizations:ListPolicies",
-          "s3:GetAccelerateConfiguration",
-          "s3:GetAccessPoint",
-          "s3:GetAccessPointPolicy",
-          "s3:GetAccessPointPolicyStatus",
-          "s3:GetAccountPublicAccessBlock",
-          "s3:GetAnalyticsConfiguration",
-          "s3:GetBucket*",
-          "s3:GetEncryptionConfiguration",
-          "s3:GetInventoryConfiguration",
-          "s3:GetLifecycleConfiguration",
-          "s3:GetMetricsConfiguration",
-          "s3:GetObjectAcl",
-          "s3:GetObjectVersionAcl",
-          "s3:GetReplicationConfiguration",
-          "s3:ListAccessPoints",
-          "s3:ListAllMyBuckets",
-          "securityhub:Get*",
-          "sns:ListSubscriptionsByTopic"
-        ]
-        Effect   = "Allow"
-        Resource = "*"
-      }
-    ]
-  }
+  sca_role_policy = templatefile("${path.module}/policies/sca-role-policy.json", {
+    account_id               = data.aws_caller_identity.current.account_id
+    cloudtrail_bucket_arn    = aws_s3_bucket.cloudtrail.arn
+    cloudtrail_kms_key_arn   = aws_kms_key.cloudtrail.arn
+    partition                = data.aws_partition.current.partition
+    role_name                = var.role_name
+    vpc_flow_logs_bucket_arn = aws_s3_bucket.vpc_flow_logs.arn
+  })
+
+  vpc_flow_logs_bucket_policy = templatefile("${path.module}/policies/vpc-flow-logs-bucket-policy.json", {
+    account_id               = data.aws_caller_identity.current.account_id
+    partition                = data.aws_partition.current.partition
+    region                   = data.aws_region.current.region
+    source_ips               = var.sca_allowed_source_ips
+    vpc_flow_logs_bucket_arn = aws_s3_bucket.vpc_flow_logs.arn
+  })
+
+  cloudtrail_kms_policy = templatefile("${path.module}/policies/cloudtrail-kms-policy.json", {
+    account_id      = data.aws_caller_identity.current.account_id
+    cloudtrail_name = var.cloudtrail_name
+    partition       = data.aws_partition.current.partition
+    region          = data.aws_region.current.region
+    sca_role_arn    = aws_iam_role.sca_role.arn
+  })
+
+  cloudtrail_bucket_policy = templatefile("${path.module}/policies/cloudtrail-bucket-policy.json", {
+    account_id            = data.aws_caller_identity.current.account_id
+    cloudtrail_bucket_arn = aws_s3_bucket.cloudtrail.arn
+    cloudtrail_name       = var.cloudtrail_name
+    cloudtrail_prefix     = var.cloudtrail_prefix
+    partition             = data.aws_partition.current.partition
+    region                = data.aws_region.current.region
+  })
 }
 
 resource "aws_iam_role" "sca_role" {
@@ -508,8 +383,8 @@ resource "aws_iam_role" "sca_role" {
 }
 
 resource "aws_iam_policy" "sca_policy" {
-  name        = var.policy_name
-  policy      = jsonencode(local.custom_xdr_analytics_role_policy)
+  name   = var.policy_name
+  policy = local.sca_role_policy
 
   tags = {
     Name        = var.policy_name
@@ -596,127 +471,9 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "vpc_flow_logs" {
   }
 }
 
-data "aws_iam_policy_document" "vpc_flow_logs_bucket_policy" {
-  # The bucket policy has two jobs:
-  # 1. allow Cisco-managed source IPs to read delivered flow logs
-  # 2. allow AWS log delivery to write the flow logs into the bucket
-  statement {
-    sid    = "AllowBucketAccessFromSpecificIPs"
-    effect = "Allow"
-
-    principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
-
-    actions = [
-      "s3:ListBucket",
-      "s3:GetBucketLocation"
-    ]
-
-    resources = [
-      aws_s3_bucket.vpc_flow_logs.arn
-    ]
-
-    condition {
-      test     = "IpAddress"
-      variable = "aws:SourceIp"
-      values   = var.sca_allowed_source_ips
-    }
-  }
-
-  statement {
-    sid    = "AllowObjectAccessFromSpecificIPs"
-    effect = "Allow"
-
-    principals {
-      type        = "*"
-      identifiers = ["*"]
-    }
-
-    actions = [
-      "s3:GetObject"
-    ]
-
-    resources = [
-      "${aws_s3_bucket.vpc_flow_logs.arn}/*"
-    ]
-
-    condition {
-      test     = "IpAddress"
-      variable = "aws:SourceIp"
-      values   = var.sca_allowed_source_ips
-    }
-  }
-
-  statement {
-    sid    = "AWSLogDeliveryCheck"
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["delivery.logs.amazonaws.com"]
-    }
-
-    actions = [
-      "s3:GetBucketAcl"
-    ]
-
-    resources = [
-      aws_s3_bucket.vpc_flow_logs.arn
-    ]
-
-    condition {
-      test     = "StringEquals"
-      variable = "aws:SourceAccount"
-      values   = [data.aws_caller_identity.current.account_id]
-    }
-
-    condition {
-      test     = "ArnLike"
-      variable = "aws:SourceArn"
-      values = [
-        "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*"
-      ]
-    }
-  }
-
-  statement {
-    sid    = "AWSLogDeliveryWrite"
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["delivery.logs.amazonaws.com"]
-    }
-
-    actions = [
-      "s3:PutObject"
-    ]
-
-    resources = [
-      "${aws_s3_bucket.vpc_flow_logs.arn}/*"
-    ]
-
-    condition {
-      test     = "StringEquals"
-      variable = "aws:SourceAccount"
-      values   = [data.aws_caller_identity.current.account_id]
-    }
-
-    condition {
-      test     = "ArnLike"
-      variable = "aws:SourceArn"
-      values = [
-        "arn:${data.aws_partition.current.partition}:logs:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:*"
-      ]
-    }
-  }
-}
-
 resource "aws_s3_bucket_policy" "vpc_flow_logs" {
   bucket = aws_s3_bucket.vpc_flow_logs.id
-  policy = data.aws_iam_policy_document.vpc_flow_logs_bucket_policy.json
+  policy = local.vpc_flow_logs_bucket_policy
 }
 
 resource "aws_flow_log" "vpc_flow_logs" {
@@ -797,78 +554,11 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
   }
 }
 
-data "aws_iam_policy_document" "cloudtrail_kms" {
-  # CloudTrail must be able to generate data keys with the same KMS key
-  # that Terraform manages or imports for this deployment.
-  statement {
-    sid    = "EnableRootPermissions"
-    effect = "Allow"
-
-    principals {
-      type        = "AWS"
-      identifiers = ["arn:${data.aws_partition.current.partition}:iam::${data.aws_caller_identity.current.account_id}:root"]
-    }
-
-    actions   = ["kms:*"]
-    resources = ["*"]
-  }
-
-  statement {
-    sid    = "AllowCloudTrailToGenerateDataKeys"
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["cloudtrail.amazonaws.com"]
-    }
-
-    actions = [
-      "kms:GenerateDataKey*",
-      "kms:DescribeKey"
-    ]
-
-    resources = ["*"]
-
-    condition {
-      test     = "StringEquals"
-      variable = "aws:SourceArn"
-      values = [
-        "arn:${data.aws_partition.current.partition}:cloudtrail:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:trail/${var.cloudtrail_name}"
-      ]
-    }
-
-    condition {
-      test     = "StringLike"
-      variable = "kms:EncryptionContext:aws:cloudtrail:arn"
-      values = [
-        "arn:${data.aws_partition.current.partition}:cloudtrail:*:${data.aws_caller_identity.current.account_id}:trail/*"
-      ]
-    }
-  }
-
-  statement {
-    sid    = "AllowCiscoRoleToDecryptCloudTrailLogs"
-    effect = "Allow"
-
-    principals {
-      type        = "AWS"
-      identifiers = [aws_iam_role.sca_role.arn]
-    }
-
-    actions = [
-      "kms:Decrypt",
-      "kms:DescribeKey"
-    ]
-
-    resources = ["*"]
-  }
-}
-
 resource "aws_kms_key" "cloudtrail" {
   description             = "KMS key for CloudTrail trail ${var.cloudtrail_name}"
   deletion_window_in_days = 7
   enable_key_rotation     = true
-  policy                  = data.aws_iam_policy_document.cloudtrail_kms.json
+  policy                  = local.cloudtrail_kms_policy
 
   tags = {
     Name        = var.cloudtrail_name
@@ -883,69 +573,9 @@ resource "aws_kms_alias" "cloudtrail" {
   target_key_id = aws_kms_key.cloudtrail.key_id
 }
 
-data "aws_iam_policy_document" "cloudtrail_bucket_policy" {
-  statement {
-    sid    = "AWSCloudTrailAclCheck"
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["cloudtrail.amazonaws.com"]
-    }
-
-    actions = [
-      "s3:GetBucketAcl"
-    ]
-
-    resources = [
-      aws_s3_bucket.cloudtrail.arn
-    ]
-
-    condition {
-      test     = "StringEquals"
-      variable = "aws:SourceArn"
-      values = [
-        "arn:${data.aws_partition.current.partition}:cloudtrail:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:trail/${var.cloudtrail_name}"
-      ]
-    }
-  }
-
-  statement {
-    sid    = "AWSCloudTrailWrite"
-    effect = "Allow"
-
-    principals {
-      type        = "Service"
-      identifiers = ["cloudtrail.amazonaws.com"]
-    }
-
-    actions = [
-      "s3:PutObject"
-    ]
-
-    resources = [
-      "${aws_s3_bucket.cloudtrail.arn}/${var.cloudtrail_prefix}/AWSLogs/${data.aws_caller_identity.current.account_id}/*"
-    ]
-
-    condition {
-      test     = "StringEquals"
-      variable = "s3:x-amz-acl"
-      values   = ["bucket-owner-full-control"]
-    }
-
-    condition {
-      test     = "StringEquals"
-      variable = "aws:SourceArn"
-      values = [
-        "arn:${data.aws_partition.current.partition}:cloudtrail:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:trail/${var.cloudtrail_name}"
-      ]
-    }
-  }
-}
-
 resource "aws_s3_bucket_policy" "cloudtrail" {
   bucket = aws_s3_bucket.cloudtrail.id
-  policy = data.aws_iam_policy_document.cloudtrail_bucket_policy.json
+  policy = local.cloudtrail_bucket_policy
 }
 
 resource "aws_cloudtrail" "this" {

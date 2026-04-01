@@ -17,6 +17,7 @@ The configuration provisions:
 ## Files
 
 - `main.tf` contains Terraform resources, variables, and outputs.
+- `policies/` contains the default JSON policy templates applied to the IAM role, S3 buckets, and CloudTrail KMS key.
 - `terraform.tfvars` contains environment-specific values.
 - `deploy.sh` imports matching pre-existing AWS resources into Terraform state and then applies changes.
 
@@ -49,6 +50,8 @@ For multi-VPC onboarding, the clearest option is to set `additional_vpc_ids` in 
 
 `vpc_flow_log_vpc_count` still defaults to `1`, which preserves single-VPC behavior. If `additional_vpc_ids` is empty, you can set `vpc_flow_log_vpc_count` to an integer from `1` to `100` to auto-select more VPCs from the same region. When `additional_vpc_ids` is provided, that explicit list takes precedence.
 
+Policy customization in `v3` is file-based. The default policies live in `policies/`, and users can modify those checked-in JSON files directly when they need to adjust the permissions applied by Terraform.
+
 ## Prerequisites
 
 - Terraform installed
@@ -67,9 +70,9 @@ From this directory, the recommended command is:
 `deploy.sh` will:
 
 - Run `terraform init`
-- Checks AWS for matching pre-existing resources
-- Imports those resources into Terraform state when found
-- Creates only the missing resources
+- Check AWS for matching pre-existing resources
+- Import those resources into Terraform state when found
+- Create only the missing resources
 
 You can also run Terraform manually:
 
@@ -84,6 +87,8 @@ To skip the interactive approval step:
 ```bash
 terraform apply -auto-approve
 ```
+
+If you customize any files in `policies/`, review the diff carefully before applying so you understand exactly which permissions will change.
 
 ## Outputs
 

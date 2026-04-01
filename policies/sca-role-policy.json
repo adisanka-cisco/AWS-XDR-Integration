@@ -1,0 +1,155 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "autoscaling:Describe*",
+        "cloudtrail:LookupEvents",
+        "cloudwatch:Get*",
+        "cloudwatch:List*",
+        "ec2:Describe*",
+        "ecs:List*",
+        "ecs:Describe*",
+        "elasticache:Describe*",
+        "elasticache:List*",
+        "elasticloadbalancing:Describe*",
+        "guardduty:Get*",
+        "guardduty:List*",
+        "iam:Get*",
+        "iam:List*",
+        "inspector:*",
+        "rds:Describe*",
+        "rds:List*",
+        "redshift:Describe*",
+        "workspaces:Describe*",
+        "route53:List*"
+      ],
+      "Effect": "Allow",
+      "Resource": "*"
+    },
+    {
+      "Action": [
+        "logs:Describe*",
+        "logs:Get*",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents",
+        "logs:ListTagsForResource",
+        "logs:DescribeResourcePolicies",
+        "logs:PutSubscriptionFilter",
+        "logs:DeleteSubscriptionFilter"
+      ],
+      "Effect": "Allow",
+      "Resource": "*"
+    },
+    {
+      "Sid": "ManageVpcFlowLogs",
+      "Action": [
+        "ec2:CreateFlowLogs",
+        "ec2:DeleteFlowLogs",
+        "ec2:DescribeFlowLogs"
+      ],
+      "Effect": "Allow",
+      "Resource": "*"
+    },
+    {
+      "Sid": "PublishVpcFlowLogsToCloudWatch",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams"
+      ],
+      "Effect": "Allow",
+      "Resource": "*"
+    },
+    {
+      "Sid": "PassRoleForVpcFlowLogs",
+      "Action": [
+        "iam:PassRole"
+      ],
+      "Effect": "Allow",
+      "Resource": "arn:${partition}:iam::${account_id}:role/${role_name}",
+      "Condition": {
+        "StringEquals": {
+          "iam:PassedToService": "vpc-flow-logs.amazonaws.com"
+        }
+      }
+    },
+    {
+      "Sid": "ReadVpcFlowLogBuckets",
+      "Action": [
+        "s3:GetBucketLocation",
+        "s3:ListBucket",
+        "s3:ListBucketVersions"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "${vpc_flow_logs_bucket_arn}",
+        "${cloudtrail_bucket_arn}"
+      ]
+    },
+    {
+      "Sid": "ReadVpcFlowLogObjects",
+      "Action": [
+        "s3:GetObject",
+        "s3:GetObjectVersion"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "${vpc_flow_logs_bucket_arn}/*",
+        "${cloudtrail_bucket_arn}/*"
+      ]
+    },
+    {
+      "Sid": "ReadCloudTrailKmsKey",
+      "Action": [
+        "kms:Decrypt",
+        "kms:DescribeKey"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "${cloudtrail_kms_key_arn}"
+      ]
+    },
+    {
+      "Sid": "CloudCompliance",
+      "Action": [
+        "access-analyzer:ListAnalyzers",
+        "cloudtrail:DescribeTrails",
+        "cloudtrail:GetEventSelectors",
+        "cloudtrail:GetTrailStatus",
+        "cloudtrail:ListTags",
+        "cloudwatch:DescribeAlarmsForMetric",
+        "config:Get*",
+        "config:Describe*",
+        "ec2:GetEbsEncryptionByDefault",
+        "iam:GenerateCredentialReport",
+        "kms:GetKeyRotationStatus",
+        "kms:ListKeys",
+        "logs:DescribeMetricFilters",
+        "organizations:ListPolicies",
+        "s3:GetAccelerateConfiguration",
+        "s3:GetAccessPoint",
+        "s3:GetAccessPointPolicy",
+        "s3:GetAccessPointPolicyStatus",
+        "s3:GetAccountPublicAccessBlock",
+        "s3:GetAnalyticsConfiguration",
+        "s3:GetBucket*",
+        "s3:GetEncryptionConfiguration",
+        "s3:GetInventoryConfiguration",
+        "s3:GetLifecycleConfiguration",
+        "s3:GetMetricsConfiguration",
+        "s3:GetObjectAcl",
+        "s3:GetObjectVersionAcl",
+        "s3:GetReplicationConfiguration",
+        "s3:ListAccessPoints",
+        "s3:ListAllMyBuckets",
+        "securityhub:Get*",
+        "sns:ListSubscriptionsByTopic"
+      ],
+      "Effect": "Allow",
+      "Resource": "*"
+    }
+  ]
+}
