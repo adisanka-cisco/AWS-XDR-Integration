@@ -21,9 +21,27 @@ The configuration provisions:
 - `terraform.tfvars` contains environment-specific values.
 - `deploy.sh` imports matching pre-existing AWS resources into Terraform state and then applies changes.
 
+## Quick Start
+
+1. Download or clone this repository to your local machine.
+2. Change into the repository directory.
+3. Configure AWS credentials for the target account.
+4. Review `terraform.tfvars` and update any optional overrides you want to use.
+5. Run `./deploy.sh`.
+6. Wait about 5 minutes for fresh logs to land in S3 before trying the Cisco Secure Cloud Analytics integration.
+7. Use the console output or `python_consumer_outputs.json` when entering values in Cisco.
+
+If `deploy.sh` is not executable in your local environment, run:
+
+```bash
+chmod +x deploy.sh
+```
+
 ## Configuration
 
-Set the required values in `terraform.tfvars`:
+`terraform.tfvars` is the main place for optional environment-specific overrides. In many cases, the default values are enough and you may not need to change anything.
+
+Example optional overrides:
 
 ```hcl
 aws_region = "us-east-1"
@@ -54,6 +72,7 @@ Policy customization in `v3` is file-based. The default policies live in `polici
 
 - Terraform installed
 - AWS credentials configured for the target account
+- AWS permissions to create, update, and destroy the IAM, S3, KMS, CloudTrail, CloudWatch Logs, and EC2 Flow Log resources used by this deployment
 - At least one existing VPC in the target region
 - Globally unique S3 bucket names
 
