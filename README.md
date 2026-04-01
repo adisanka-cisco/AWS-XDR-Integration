@@ -26,7 +26,7 @@ The configuration provisions:
 1. Download or clone this repository to your local machine.
 2. Change into the repository directory.
 3. Configure AWS credentials for the target account.
-4. Review `terraform.tfvars` and update any optional overrides you want to use.
+4. Review `terraform.tfvars` and update any optional overrides you want to use, including `aws_region` if you want to deploy outside the default region.
 5. Run `./deploy.sh`.
 6. Wait about 5 minutes for fresh logs to land in S3 before trying the Cisco Secure Cloud Analytics integration.
 7. Use the console output or `python_consumer_outputs.json` when entering values in Cisco.
@@ -40,6 +40,8 @@ chmod +x deploy.sh
 ## Configuration
 
 `terraform.tfvars` is the main place for optional environment-specific overrides. In many cases, the default values are enough and you may not need to change anything.
+
+You can also override the deployment region here by changing `aws_region`. The AWS provider in [main.tf](/Users/bqamar/work-dev/AWS-XDR-integration/main.tf) uses that value directly, so the deploy script and Terraform resource lookups will follow the region you set.
 
 Example optional overrides:
 
@@ -55,6 +57,7 @@ aws_region = "us-east-1"
 
 Optional overrides include:
 
+- `aws_region`
 - `role_name`
 - `vpc_ids`
 - `vpc_flow_logs_bucket_name`
