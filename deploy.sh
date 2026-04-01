@@ -1,5 +1,9 @@
 #!/usr/bin/env bash
 
+# Safe wrapper around Terraform for this repo.
+# Use this script for normal deployments when you want existing AWS resources
+# to be imported into state before Terraform applies any changes.
+
 set -euo pipefail
 
 cd "$(dirname "$0")"
@@ -40,6 +44,8 @@ has_state() {
   terraform state show "$1" >/dev/null 2>&1
 }
 
+# Keep these wrappers separate so the deploy flow reads like "check/import if
+# missing" rather than repeating terraform state logic inline.
 in_state() {
   terraform state show "$1" >/dev/null 2>&1
 }
@@ -75,6 +81,9 @@ echo "Checking AWS for existing resources..."
 
 # Import matching AWS resources into Terraform state before apply so repeated
 # runs adopt what already exists instead of trying to recreate it.
+# If your local environment uses different resource names, bucket names, or
+# regions, update terraform.tfvars first so these lookups target the right AWS
+# resources.
 if aws iam get-role --role-name "$role_name" >/dev/null 2>&1; then
   import_if_missing "aws_iam_role.sca_role" "$role_name"
 fi
@@ -110,6 +119,9 @@ if [[ -n "$trail_arn" && "$trail_arn" != "None" ]]; then
   import_if_missing "aws_cloudtrail.this" "$trail_arn"
 fi
 
+# Discover VPCs in the configured region the same way Terraform will. The
+# wrapper uses this list both for validation and for importing existing flow
+# logs before apply.
 all_vpc_ids=()
 while IFS= read -r discovered_vpc_id; do
   all_vpc_ids+=("$discovered_vpc_id")
@@ -159,6 +171,8 @@ done
 echo "Applying Terraform..."
 terraform apply -auto-approve
 
+# Print the JSON file to the console as a convenience so users do not need to
+# open the generated file separately when copying values into Cisco.
 if [[ -f python_consumer_outputs.json ]]; then
   echo
   echo "python_consumer_outputs.json:"
