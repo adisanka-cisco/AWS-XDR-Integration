@@ -124,6 +124,9 @@ Example structure:
 
 ## Cleanup
 
+Warning: `terraform destroy` is a destructive action. Use it with caution, and
+only when you intend to permanently remove the provisioned AWS resources.
+
 To remove the provisioned resources:
 
 ```bash
