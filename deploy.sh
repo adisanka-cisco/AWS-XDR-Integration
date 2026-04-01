@@ -65,8 +65,7 @@ cloudtrail_name="$(tf_var cloudtrail_name)"
 cloudtrail_kms_alias_name="$(tf_var cloudtrail_kms_alias_name)"
 cloudtrail_bucket_name="$(tf_var cloudtrail_bucket_name)"
 vpc_flow_logs_bucket_name="$(tf_var vpc_flow_logs_bucket_name)"
-vpc_id="$(tf_var vpc_id)"
-vpc_flow_log_vpc_count="$(tf_var vpc_flow_log_vpc_count)"
+raw_vpc_ids="$(terraform console -var-file=terraform.tfvars <<< "jsonencode(var.vpc_ids)" | tr -d '\r' | jq -r '.')"
 
 echo "Checking AWS for existing resources..."
 
@@ -117,26 +116,24 @@ done < <(
     sort
 )
 
-if [[ ! " ${all_vpc_ids[*]} " =~ " ${vpc_id} " ]]; then
-  die "Primary vpc_id '$vpc_id' was not found in region '$aws_region'."
+if (( ${#all_vpc_ids[@]} == 0 )); then
+  die "No VPCs were discovered in region '$aws_region'. Ensure the AWS credentials can access at least one VPC or set vpc_ids in terraform.tfvars."
 fi
 
-if (( vpc_flow_log_vpc_count > ${#all_vpc_ids[@]} )); then
-  die "vpc_flow_log_vpc_count is set to $vpc_flow_log_vpc_count, but only ${#all_vpc_ids[@]} VPCs exist in region '$aws_region'."
+selected_vpc_ids=()
+if [[ "$raw_vpc_ids" != "[]" ]]; then
+  while IFS= read -r configured_vpc_id; do
+    selected_vpc_ids+=("$configured_vpc_id")
+  done < <(jq -r '.[]' <<< "$raw_vpc_ids")
+
+  for configured_vpc_id in "${selected_vpc_ids[@]}"; do
+    if [[ ! " ${all_vpc_ids[*]} " =~ " ${configured_vpc_id} " ]]; then
+      die "Configured vpc_ids entry '$configured_vpc_id' was not found in region '$aws_region'."
+    fi
+  done
+else
+  selected_vpc_ids=("${all_vpc_ids[@]:0:100}")
 fi
-
-selected_vpc_ids=("$vpc_id")
-for candidate_vpc_id in "${all_vpc_ids[@]}"; do
-  if [[ "$candidate_vpc_id" == "$vpc_id" ]]; then
-    continue
-  fi
-
-  if (( ${#selected_vpc_ids[@]} >= vpc_flow_log_vpc_count )); then
-    break
-  fi
-
-  selected_vpc_ids+=("$candidate_vpc_id")
-done
 
 if has_state "aws_flow_log.vpc_flow_logs" && ! has_state "aws_flow_log.vpc_flow_logs[0]"; then
   terraform state mv "aws_flow_log.vpc_flow_logs" "aws_flow_log.vpc_flow_logs[0]"

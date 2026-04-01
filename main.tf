@@ -31,47 +31,26 @@ variable "aws_region" {
   }
 }
 
-variable "vpc_id" {
-  description = "ID of the VPC to enable flow logs on"
-  type        = string
-
-  validation {
-    condition     = can(regex("^vpc-[0-9a-f]+$", var.vpc_id))
-    error_message = "vpc_id must look like an AWS VPC ID, for example vpc-0123456789abcdef0."
-  }
-}
-
-variable "vpc_flow_log_vpc_count" {
-  description = "How many VPCs should have flow logs enabled, including the primary vpc_id"
-  type        = number
-  default     = 1
-
-  validation {
-    condition     = var.vpc_flow_log_vpc_count >= 1 && var.vpc_flow_log_vpc_count <= 100 && floor(var.vpc_flow_log_vpc_count) == var.vpc_flow_log_vpc_count
-    error_message = "vpc_flow_log_vpc_count must be an integer between 1 and 100."
-  }
-}
-
-variable "additional_vpc_ids" {
-  description = "Optional explicit list of additional VPC IDs to enable flow logs on, in addition to vpc_id"
+variable "vpc_ids" {
+  description = "Optional explicit list of VPC IDs to enable flow logs on instead of using the default discovered VPC list"
   type        = list(string)
   default     = []
 
   validation {
     condition = alltrue([
-      for id in var.additional_vpc_ids : can(regex("^vpc-[0-9a-f]+$", id))
+      for id in var.vpc_ids : can(regex("^vpc-[0-9a-f]+$", id))
     ])
-    error_message = "additional_vpc_ids must contain only valid AWS VPC IDs, for example vpc-0123456789abcdef0."
+    error_message = "vpc_ids must contain only valid AWS VPC IDs, for example vpc-0123456789abcdef0."
   }
 
   validation {
-    condition     = length(distinct(var.additional_vpc_ids)) == length(var.additional_vpc_ids)
-    error_message = "additional_vpc_ids must not contain duplicates."
+    condition     = length(distinct(var.vpc_ids)) == length(var.vpc_ids)
+    error_message = "vpc_ids must not contain duplicates."
   }
 
   validation {
-    condition     = length(var.additional_vpc_ids) <= 99
-    error_message = "additional_vpc_ids can contain at most 99 VPC IDs because the primary vpc_id is always included."
+    condition     = length(var.vpc_ids) <= 100
+    error_message = "vpc_ids can contain at most 100 VPC IDs."
   }
 }
 
@@ -256,10 +235,6 @@ data "aws_region" "current" {}
 
 data "aws_partition" "current" {}
 
-data "aws_vpc" "target" {
-  id = var.vpc_id
-}
-
 data "aws_vpcs" "available" {}
 
 ########################################
@@ -314,27 +289,13 @@ data "aws_iam_policy_document" "sca_trust" {
 }
 
 locals {
-  explicit_additional_vpc_ids = [
-    for id in var.additional_vpc_ids : id
-    if id != var.vpc_id
-  ]
-
-  ordered_vpc_ids = concat(
-    [var.vpc_id],
-    sort([
-      for id in data.aws_vpcs.available.ids : id
-      if id != var.vpc_id
-    ])
-  )
-
-  selected_vpc_ids = length(local.explicit_additional_vpc_ids) > 0 ? concat(
-    [var.vpc_id],
-    local.explicit_additional_vpc_ids
-    ) : slice(
-    local.ordered_vpc_ids,
+  discovered_vpc_ids = slice(
+    sort(data.aws_vpcs.available.ids),
     0,
-    min(var.vpc_flow_log_vpc_count, length(local.ordered_vpc_ids))
+    min(100, length(data.aws_vpcs.available.ids))
   )
+
+  selected_vpc_ids = length(var.vpc_ids) > 0 ? var.vpc_ids : local.discovered_vpc_ids
 
   sca_role_policy = templatefile("${path.module}/policies/sca-role-policy.json", {
     account_id               = data.aws_caller_identity.current.account_id
@@ -488,6 +449,13 @@ resource "aws_flow_log" "vpc_flow_logs" {
     ManagedBy   = "Terraform"
     Destination = aws_s3_bucket.vpc_flow_logs.bucket
     Integration = "Cisco Secure Cloud Analytics"
+  }
+
+  lifecycle {
+    precondition {
+      condition     = length(local.selected_vpc_ids) > 0
+      error_message = "No VPCs were selected for flow log creation. Ensure the AWS credentials can discover at least one VPC in the configured region or set vpc_ids in terraform.tfvars."
+    }
   }
 }
 
@@ -706,11 +674,6 @@ output "cloudtrail_log_prefix" {
 output "policy_arn" {
   description = "Managed IAM policy ARN attached to the Secure Cloud Analytics role"
   value       = aws_iam_policy.sca_policy.arn
-}
-
-output "target_vpc_id" {
-  description = "Primary target VPC ID"
-  value       = data.aws_vpc.target.id
 }
 
 output "target_vpc_ids" {

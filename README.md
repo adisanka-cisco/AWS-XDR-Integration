@@ -9,7 +9,7 @@ The configuration provisions:
 - An IAM role and policy that Cisco Secure Cloud Analytics can assume
 - A CloudWatch Logs group and supporting IAM permissions for Cisco-managed VPC Flow Log onboarding
 - An S3 bucket for VPC Flow Logs
-- VPC Flow Logs for a target VPC
+- VPC Flow Logs for discovered or explicitly selected VPCs
 - An S3 bucket for CloudTrail logs
 - A KMS key and alias for CloudTrail encryption
 - A CloudTrail trail for management events
@@ -27,10 +27,9 @@ Set the required values in `terraform.tfvars`:
 
 ```hcl
 aws_region = "us-east-1"
-vpc_id     = "vpc-06393f1da0e049d3e"
 
-# Optional: explicitly add more VPCs for flow logs
-# additional_vpc_ids = [
+# Optional override: send flow logs only for these VPCs
+# vpc_ids = [
 #   "vpc-0123456789abcdef0",
 #   "vpc-0fedcba9876543210"
 # ]
@@ -39,16 +38,15 @@ vpc_id     = "vpc-06393f1da0e049d3e"
 Optional overrides include:
 
 - `role_name`
-- `additional_vpc_ids`
-- `vpc_flow_log_vpc_count`
+- `vpc_ids`
 - `vpc_flow_logs_bucket_name`
 - `cloudtrail_bucket_name`
 - `external_id`
 - `flow_logs_cloudwatch_log_group_name`
 
-For multi-VPC onboarding, the clearest option is to set `additional_vpc_ids` in [terraform.tfvars](/Users/bqamar/work-dev/AWS-XDR-integration/terraform.tfvars). Terraform always includes the primary `vpc_id`, then adds each VPC listed in `additional_vpc_ids`. All selected VPCs write to the same flow log bucket.
+By default, Terraform discovers all VPCs visible to the configured AWS credentials in the target region and enables flow logs for up to 100 of them. All selected VPCs write to the same flow log bucket.
 
-`vpc_flow_log_vpc_count` still defaults to `1`, which preserves single-VPC behavior. If `additional_vpc_ids` is empty, you can set `vpc_flow_log_vpc_count` to an integer from `1` to `100` to auto-select more VPCs from the same region. When `additional_vpc_ids` is provided, that explicit list takes precedence.
+If you want to use a specific subset instead, set `vpc_ids` in [terraform.tfvars](/Users/bqamar/work-dev/AWS-XDR-integration/terraform.tfvars). When `vpc_ids` is provided, Terraform uses exactly that list instead of the default discovery behavior. Single-VPC environments still work naturally because the discovered list may contain only one VPC.
 
 Policy customization in `v3` is file-based. The default policies live in `policies/`, and users can modify those checked-in JSON files directly when they need to adjust the permissions applied by Terraform.
 
@@ -97,6 +95,7 @@ After `terraform apply`, Terraform prints values commonly needed in Cisco Secure
 - IAM role ARN
 - VPC Flow Logs bucket name
 - VPC Flow Log CloudWatch Logs group name
+- Selected VPC IDs
 - CloudTrail Logs bucket name
 - CloudTrail Logs bucket path
 
