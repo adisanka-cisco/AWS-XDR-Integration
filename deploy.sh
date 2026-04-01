@@ -150,3 +150,13 @@ done
 
 echo "Applying Terraform..."
 terraform apply -auto-approve
+
+if [[ -f python_consumer_outputs.json ]]; then
+  echo
+  echo "python_consumer_outputs.json:"
+  if command -v jq >/dev/null 2>&1; then
+    jq . python_consumer_outputs.json
+  else
+    cat python_consumer_outputs.json
+  fi
+fi
