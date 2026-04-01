@@ -159,4 +159,6 @@ if [[ -f python_consumer_outputs.json ]]; then
   else
     cat python_consumer_outputs.json
   fi
+  echo
+  echo "Note: after a fresh deploy or redeploy, wait about 5 minutes before trying the Cisco Secure Cloud Analytics integration so AWS has time to deliver fresh log objects."
 fi

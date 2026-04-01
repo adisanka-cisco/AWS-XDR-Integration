@@ -88,9 +88,16 @@ terraform apply -auto-approve
 
 If you customize any files in `policies/`, review the diff carefully before applying so you understand exactly which permissions will change.
 
+After a fresh deploy or redeploy, wait about 5 minutes before trying the Cisco Secure Cloud Analytics integration. This gives AWS time to deliver fresh VPC Flow Log and CloudTrail objects so Cisco validation does not fail on timing alone.
+
 ## Outputs
 
-After `terraform apply`, Terraform prints values commonly needed in Cisco Secure Cloud Analytics, including:
+Running `./deploy.sh` gives you two output formats for the provisioned integration details:
+
+- a console summary with the key Terraform outputs needed for Cisco Secure Cloud Analytics
+- a structured JSON file, `python_consumer_outputs.json`, for copy/paste or automation
+
+The console output includes values commonly needed in Cisco Secure Cloud Analytics, including:
 
 - IAM role ARN
 - VPC Flow Logs bucket name
@@ -99,7 +106,11 @@ After `terraform apply`, Terraform prints values commonly needed in Cisco Secure
 - CloudTrail Logs bucket name
 - CloudTrail Logs bucket path
 
-Terraform also writes `python_consumer_outputs.json`.
+The JSON file groups the same information into sections for:
+
+- `aws_credentials`
+- `cloudtrail`
+- `vpc_flow_logs`
 
 Example structure:
 
