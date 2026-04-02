@@ -1,3 +1,7 @@
+# User-editable environment settings for this deployment.
+# Update this file to choose the AWS region and optional overrides such as
+# explicit VPC selection, role naming, and log bucket names.
+
 aws_region = "us-east-1"
 
 # Optional overrides
@@ -10,4 +14,5 @@ aws_region = "us-east-1"
 role_name                 = "obsrvbl-role-custom"
 vpc_flow_logs_bucket_name = "xdranalyticsflowlogsbucket"
 cloudtrail_bucket_name    = "aws-cloudtrail-logs-933833866075-1168ac82"
-external_id               = "cisco-explorcorp-earth"
+# Required: set this to your Secure Cloud Analytics org name.
+external_id               = ""

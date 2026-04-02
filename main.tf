@@ -1,3 +1,9 @@
+########################################
+# Primary Terraform configuration
+# Edit this file when changing managed AWS resources, outputs, or how the
+# policy templates are wired into the deployment.
+########################################
+
 terraform {
   required_version = ">= 1.5.0"
 
@@ -83,9 +89,8 @@ variable "trusted_account_id" {
 }
 
 variable "external_id" {
-  description = "Secure Cloud Analytics portal name used as the IAM External ID"
+  description = "Secure Cloud Analytics org name used as the IAM External ID"
   type        = string
-  default     = "cisco-explorcorp-earth"
 
   validation {
     condition     = length(trimspace(var.external_id)) > 0

@@ -17,6 +17,31 @@ require_command() {
   command -v "$1" >/dev/null 2>&1 || die "Required command '$1' is not installed or not on PATH."
 }
 
+trim() {
+  local value="$1"
+  value="${value#"${value%%[![:space:]]*}"}"
+  value="${value%"${value##*[![:space:]]}"}"
+  printf '%s' "$value"
+}
+
+read_tfvars_string_var() {
+  local var_name="$1"
+
+  awk -v name="$var_name" '
+    $0 ~ "^[[:space:]]*" name "[[:space:]]*=" {
+      line = $0
+      sub("^[[:space:]]*" name "[[:space:]]*=[[:space:]]*", "", line)
+      sub(/[[:space:]]*(#.*)?$/, "", line)
+      if (line ~ /^".*"$/) {
+        sub(/^"/, "", line)
+        sub(/"$/, "", line)
+      }
+      print line
+      exit
+    }
+  ' terraform.tfvars
+}
+
 # Expired shell credentials caused earlier runs to fail, so the wrapper always
 # falls back to the working AWS CLI configuration on disk.
 unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE AWS_DEFAULT_PROFILE
@@ -32,12 +57,22 @@ require_command aws
 
 [[ -f terraform.tfvars ]] || die "terraform.tfvars was not found in $(pwd)."
 
+external_id="$(trim "$(read_tfvars_string_var external_id)")"
+if [[ -z "$external_id" ]]; then
+  echo "external_id is required and must be your Secure Cloud Analytics org name."
+  read -r -p "Enter external_id for this run: " external_id
+  external_id="$(trim "$external_id")"
+  [[ -n "$external_id" ]] || die "external_id is required. Set it in terraform.tfvars or enter a value when prompted."
+fi
+
+terraform_var_args=(-var-file=terraform.tfvars -var "external_id=$external_id")
+
 aws sts get-caller-identity >/dev/null 2>&1 || die "AWS credentials are not valid. Run 'aws sts get-caller-identity' after refreshing your AWS login."
 
 # Read a Terraform variable the same way Terraform itself will see it. This
 # keeps the wrapper aligned with terraform.tfvars without duplicating defaults.
 tf_var() {
-  terraform console -var-file=terraform.tfvars <<< "var.$1" | tr -d '"' | tr -d '\r'
+  terraform console "${terraform_var_args[@]}" <<< "var.$1" | tr -d '"' | tr -d '\r'
 }
 
 has_state() {
@@ -60,7 +95,7 @@ import_if_missing() {
   fi
 
   echo "Importing existing resource into state: $address"
-  terraform import "$address" "$import_id"
+  terraform import "${terraform_var_args[@]}" "$address" "$import_id"
 }
 
 echo "Initializing Terraform..."
@@ -75,7 +110,7 @@ cloudtrail_bucket_name="$(tf_var cloudtrail_bucket_name)"
 vpc_flow_logs_bucket_name="$(tf_var vpc_flow_logs_bucket_name)"
 # vpc_ids is optional. When unset, Terraform discovers VPCs automatically, so
 # the wrapper mirrors that same behavior for import/adoption.
-raw_vpc_ids="$(terraform console -var-file=terraform.tfvars <<< "jsonencode(var.vpc_ids)" | tr -d '\r' | jq -r '.')"
+raw_vpc_ids="$(terraform console "${terraform_var_args[@]}" <<< "jsonencode(var.vpc_ids)" | tr -d '\r' | jq -r '.')"
 
 echo "Checking AWS for existing resources..."
 
@@ -169,7 +204,7 @@ for index in "${!selected_vpc_ids[@]}"; do
 done
 
 echo "Applying Terraform..."
-terraform apply -auto-approve
+terraform apply "${terraform_var_args[@]}" -auto-approve
 
 # Print the JSON file to the console as a convenience so users do not need to
 # open the generated file separately when copying values into Cisco.

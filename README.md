@@ -41,9 +41,11 @@ aws sts get-caller-identity
 ```
 
 7. Review `terraform.tfvars` and update any optional overrides you want to use, including `aws_region` if you want to deploy outside the default region.
-8. Run `./deploy.sh`.
-9. Wait about 5 minutes for fresh logs to land in S3 before trying the Cisco Secure Cloud Analytics integration.
-10. Use the console output or `python_consumer_outputs.json` when entering values in Cisco.
+8. Set `external_id` in `terraform.tfvars` to the customer's Secure Cloud Analytics org name. This value is required.
+9. Run `./deploy.sh`.
+10. If `external_id` is blank in `terraform.tfvars`, `deploy.sh` will prompt for it in the terminal and use the value you enter for that run only.
+11. Wait about 5 minutes for fresh logs to land in S3 before trying the Cisco Secure Cloud Analytics integration.
+12. Use the console output or `python_consumer_outputs.json` when entering values in Cisco.
 
 If `deploy.sh` is not executable in your local environment, run:
 
@@ -53,7 +55,7 @@ chmod +x deploy.sh
 
 ## Configuration
 
-`terraform.tfvars` is the main place for optional environment-specific overrides. In many cases, the default values are enough and you may not need to change anything.
+`terraform.tfvars` is the main place for environment-specific settings and optional overrides. In many cases, the default values are enough and you may not need to change anything beyond the required `external_id`.
 
 You can also override the deployment region here by changing `aws_region`. The AWS provider in [main.tf](/Users/bqamar/work-dev/AWS-XDR-integration/main.tf) uses that value directly, so the deploy script and Terraform resource lookups will follow the region you set.
 
@@ -61,6 +63,7 @@ Example optional overrides:
 
 ```hcl
 aws_region = "us-east-1"
+external_id = "your-sca-org-name"
 
 # Optional override: send flow logs only for these VPCs
 # vpc_ids = [
@@ -76,8 +79,13 @@ Optional overrides include:
 - `vpc_ids`
 - `vpc_flow_logs_bucket_name`
 - `cloudtrail_bucket_name`
-- `external_id`
 - `flow_logs_cloudwatch_log_group_name`
+
+Required user input:
+
+- `external_id`
+
+Set `external_id` in [terraform.tfvars](/Users/bqamar/work-dev/AWS-XDR-integration/terraform.tfvars) to the customer's Secure Cloud Analytics org name. If you leave it blank and use [deploy.sh](/Users/bqamar/work-dev/AWS-XDR-integration/deploy.sh), the script will prompt for the value and use it only for that run.
 
 By default, Terraform discovers all VPCs visible to the configured AWS credentials in the target region and enables flow logs for up to 100 of them. All selected VPCs write to the same flow log bucket.
 
@@ -90,6 +98,7 @@ Policy customization in `v3` is file-based. The default policies live in `polici
 - Terraform installed and available on `PATH`
 - AWS CLI installed and available on `PATH`
 - Valid AWS CLI credentials for the target account in the current terminal session
+- `external_id` set to the customer's Secure Cloud Analytics org name in `terraform.tfvars`, or provided interactively when `./deploy.sh` prompts for it
 - AWS permissions to create, update, and destroy the IAM, S3, KMS, CloudTrail, CloudWatch Logs, and EC2 Flow Log resources used by this deployment
 - At least one existing VPC in the target region
 - Globally unique S3 bucket names
@@ -155,7 +164,7 @@ Example structure:
 {
   "aws_credentials": {
     "iam_role_arn": "arn:aws:iam::123456789012:role/obsrvbl-role-custom",
-    "external_id": "cisco-explorcorp-earth"
+    "external_id": "your-sca-org-name"
   },
   "cloudtrail": {
     "logs_bucket_name": "example-cloudtrail-logs-bucket",
