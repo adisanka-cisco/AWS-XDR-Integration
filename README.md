@@ -25,11 +25,25 @@ The configuration provisions:
 
 1. Download or clone this repository to your local machine.
 2. Change into the repository directory.
-3. Configure AWS credentials for the target account.
-4. Review `terraform.tfvars` and update any optional overrides you want to use, including `aws_region` if you want to deploy outside the default region.
-5. Run `./deploy.sh`.
-6. Wait about 5 minutes for fresh logs to land in S3 before trying the Cisco Secure Cloud Analytics integration.
-7. Use the console output or `python_consumer_outputs.json` when entering values in Cisco.
+3. Install Terraform using your platform's package manager or the official Terraform installation instructions.
+4. Install the AWS CLI using your platform's package manager or the official AWS CLI installation instructions.
+5. Verify both tools are available in your terminal:
+
+```bash
+terraform version
+aws --version
+```
+
+6. Authenticate the AWS CLI using your organization's normal login process for the target account, then confirm the current terminal session has valid AWS access:
+
+```bash
+aws sts get-caller-identity
+```
+
+7. Review `terraform.tfvars` and update any optional overrides you want to use, including `aws_region` if you want to deploy outside the default region.
+8. Run `./deploy.sh`.
+9. Wait about 5 minutes for fresh logs to land in S3 before trying the Cisco Secure Cloud Analytics integration.
+10. Use the console output or `python_consumer_outputs.json` when entering values in Cisco.
 
 If `deploy.sh` is not executable in your local environment, run:
 
@@ -73,8 +87,9 @@ Policy customization in `v3` is file-based. The default policies live in `polici
 
 ## Prerequisites
 
-- Terraform installed
-- AWS credentials configured for the target account
+- Terraform installed and available on `PATH`
+- AWS CLI installed and available on `PATH`
+- Valid AWS CLI credentials for the target account in the current terminal session
 - AWS permissions to create, update, and destroy the IAM, S3, KMS, CloudTrail, CloudWatch Logs, and EC2 Flow Log resources used by this deployment
 - At least one existing VPC in the target region
 - Globally unique S3 bucket names
