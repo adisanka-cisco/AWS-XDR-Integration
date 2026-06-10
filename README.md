@@ -28,6 +28,7 @@ After deployment, use these Terraform outputs for manual Cisco registration:
 - `policies/` contains the default JSON policy templates applied to the IAM role, S3 buckets, and CloudTrail KMS key.
 - `terraform.tfvars` contains environment-specific values.
 - `deploy.sh` imports matching pre-existing AWS resources into Terraform state, applies changes, and prints `python_consumer_outputs.json`.
+- `python_consumer_outputs.json` is generated in the repository root after a successful deploy.
 
 ## Required Inputs
 
@@ -54,7 +55,7 @@ After `./deploy.sh` completes, copy these values into the Secure Cloud Analytics
 | CloudTrail S3 path | `cloudtrail_s3_path` | `cloudtrail.s3_path` |
 | External ID, if requested | `external_id` input value | `aws_credentials.external_id` |
 
-If the UI asks for an External ID, use the same `external_id` value you supplied to Terraform. The same values are printed in the Terraform outputs and written to `python_consumer_outputs.json`.
+If the UI asks for an External ID, use the same `external_id` value you supplied to Terraform. The same values are printed in the Terraform outputs and written to `python_consumer_outputs.json` in the repository root.
 
 ## Quick Start
 
@@ -154,7 +155,7 @@ From this directory, the recommended command is:
 - Check AWS for matching pre-existing IAM, S3, KMS, CloudTrail, CloudWatch Logs, and VPC Flow Log resources
 - Import those resources into Terraform state when found
 - Create only missing resources
-- Regenerate `python_consumer_outputs.json`
+- Regenerate `python_consumer_outputs.json` in the repository root
 
 The import checks use the names and region from `terraform.tfvars`. If resources already exist with different names, update `terraform.tfvars` before running the script.
 
@@ -188,6 +189,12 @@ The required manual Cisco registration values are:
 - `role_arn`: IAM role ARN for Secure Cloud Analytics credentials
 - `vpc_flow_log_s3_path`: S3 path for VPC Flow Logs
 - `cloudtrail_s3_path`: S3 path for CloudTrail logs
+
+The JSON file is created at:
+
+```text
+<repo-directory>/python_consumer_outputs.json
+```
 
 Additional outputs include the selected VPC IDs, CloudTrail bucket name, CloudTrail prefix, policy ARN, and the helper CloudWatch Logs group name used for Cisco-managed VPC Flow Log onboarding.
 

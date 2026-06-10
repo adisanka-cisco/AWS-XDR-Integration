@@ -6,6 +6,7 @@
 - Clarified the required manual registration outputs: `role_arn`, `vpc_flow_log_s3_path`, and `cloudtrail_s3_path`.
 - Added a required-input checklist covering AWS CLI authentication, AWS permissions, region, `external_id`, VPCs, and S3 bucket names.
 - Documented `deploy.sh` import behavior, `python_consumer_outputs.json` generation, S3 lifecycle rules, and versioned bucket destroy expectations.
+- Clarified that `python_consumer_outputs.json` is generated in the repository root.
 - Improved repeat deploy idempotency by documenting and aligning S3 encryption configuration readback.
 
 ## v4 - 2026-04-01
