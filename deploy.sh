@@ -108,6 +108,7 @@ cloudtrail_name="$(tf_var cloudtrail_name)"
 cloudtrail_kms_alias_name="$(tf_var cloudtrail_kms_alias_name)"
 cloudtrail_bucket_name="$(tf_var cloudtrail_bucket_name)"
 vpc_flow_logs_bucket_name="$(tf_var vpc_flow_logs_bucket_name)"
+flow_logs_cloudwatch_log_group_name="$(tf_var flow_logs_cloudwatch_log_group_name)"
 # vpc_ids is optional. When unset, Terraform discovers VPCs automatically, so
 # the wrapper mirrors that same behavior for import/adoption.
 raw_vpc_ids="$(terraform console "${terraform_var_args[@]}" <<< "jsonencode(var.vpc_ids)" | tr -d '\r' | jq -r '.')"
@@ -152,6 +153,11 @@ fi
 trail_arn="$(aws --region "$aws_region" cloudtrail describe-trails --trail-name-list "$cloudtrail_name" --query 'trailList[0].TrailARN' --output text 2>/dev/null || true)"
 if [[ -n "$trail_arn" && "$trail_arn" != "None" ]]; then
   import_if_missing "aws_cloudtrail.this" "$trail_arn"
+fi
+
+existing_flow_logs_log_group="$(aws --region "$aws_region" logs describe-log-groups --log-group-name-prefix "$flow_logs_cloudwatch_log_group_name" --query "logGroups[?logGroupName=='$flow_logs_cloudwatch_log_group_name'].logGroupName | [0]" --output text 2>/dev/null || true)"
+if [[ -n "$existing_flow_logs_log_group" && "$existing_flow_logs_log_group" != "None" ]]; then
+  import_if_missing "aws_cloudwatch_log_group.vpc_flow_logs" "$existing_flow_logs_log_group"
 fi
 
 # Discover VPCs in the configured region the same way Terraform will. The
