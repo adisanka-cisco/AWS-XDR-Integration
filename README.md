@@ -29,6 +29,33 @@ After deployment, use these Terraform outputs for manual Cisco registration:
 - `terraform.tfvars` contains environment-specific values.
 - `deploy.sh` imports matching pre-existing AWS resources into Terraform state, applies changes, and prints `python_consumer_outputs.json`.
 
+## Required Inputs
+
+Before running `./deploy.sh`, have the following ready:
+
+- AWS CLI access to the target AWS account. Run `aws sts get-caller-identity` and confirm the returned `Account` is the AWS account you want to onboard.
+- AWS permissions to create or adopt IAM, S3, KMS, CloudTrail, CloudWatch Logs, and EC2 Flow Log resources.
+- Terraform and the AWS CLI installed on `PATH`.
+- The target AWS region, set with `aws_region` in `terraform.tfvars`.
+- The Secure Cloud Analytics org name, set as `external_id` in `terraform.tfvars` or entered when `deploy.sh` prompts.
+- At least one VPC in the target region, or an explicit `vpc_ids` list in `terraform.tfvars`.
+- Globally unique S3 bucket names if you override `vpc_flow_logs_bucket_name` or `cloudtrail_bucket_name`.
+
+`deploy.sh` intentionally clears `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_PROFILE`, and `AWS_DEFAULT_PROFILE` before running. If you normally use a named AWS profile, authenticate or configure the default profile before using `deploy.sh`, or adapt the script for your environment.
+
+## Values For Secure Cloud Analytics
+
+After `./deploy.sh` completes, copy these values into the Secure Cloud Analytics AWS integration UI:
+
+| Secure Cloud Analytics field | Terraform output | `python_consumer_outputs.json` path |
+| --- | --- | --- |
+| AWS credentials role ARN | `role_arn` | `aws_credentials.iam_role_arn` |
+| VPC Flow Logs S3 path | `vpc_flow_log_s3_path` | `vpc_flow_logs.s3_path` |
+| CloudTrail S3 path | `cloudtrail_s3_path` | `cloudtrail.s3_path` |
+| External ID, if requested | `external_id` input value | `aws_credentials.external_id` |
+
+If the UI asks for an External ID, use the same `external_id` value you supplied to Terraform. The same values are printed in the Terraform outputs and written to `python_consumer_outputs.json`.
+
 ## Quick Start
 
 1. Download or clone this repository to your local machine.
@@ -53,7 +80,7 @@ aws sts get-caller-identity
 9. Run `./deploy.sh`.
 10. If `external_id` is blank in `terraform.tfvars`, `deploy.sh` will prompt for it in the terminal and use the value you enter for that run only.
 11. Wait about 5 minutes for fresh logs to land in S3 before trying the Cisco Secure Cloud Analytics integration.
-12. Use `role_arn`, `vpc_flow_log_s3_path`, and `cloudtrail_s3_path` from the console output or `python_consumer_outputs.json` when entering values in Cisco.
+12. Use the values listed in [Values For Secure Cloud Analytics](#values-for-secure-cloud-analytics) when entering values in Cisco.
 
 If `deploy.sh` is not executable in your local environment, run:
 
@@ -107,7 +134,7 @@ Both S3 buckets have a lifecycle rule named by `lifecycle_rule_name`. The curren
 
 - Terraform installed and available on `PATH`
 - AWS CLI installed and available on `PATH`
-- Valid AWS CLI credentials for the target account in the current terminal session
+- Valid default AWS CLI credentials for the target account
 - `external_id` set to the customer's Secure Cloud Analytics org name in `terraform.tfvars`, or provided interactively when `./deploy.sh` prompts for it
 - AWS permissions to create, update, and destroy the IAM, S3, KMS, CloudTrail, CloudWatch Logs, and EC2 Flow Log resources used by this deployment
 - At least one existing VPC in the target region
