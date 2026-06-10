@@ -394,18 +394,22 @@ resource "aws_s3_bucket" "vpc_flow_logs" {
       set -euo pipefail
       unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE AWS_DEFAULT_PROFILE
       bucket="${self.bucket}"
+      deleted_count=0
 
       while true; do
         tmp="$(mktemp)"
-        aws s3api list-object-versions --bucket "$bucket" --output json \
+        aws s3api list-object-versions --bucket "$bucket" --max-items 1000 --output json \
           | jq '{Objects: (((.Versions // []) + (.DeleteMarkers // []))[:1000] | map({Key, VersionId})), Quiet: true}' > "$tmp"
+        object_count="$(jq '.Objects | length' "$tmp")"
 
-        if [ "$(jq '.Objects | length' "$tmp")" -eq 0 ]; then
+        if [ "$object_count" -eq 0 ]; then
           rm -f "$tmp"
           break
         fi
 
         aws s3api delete-objects --bucket "$bucket" --delete "file://$tmp" >/dev/null
+        deleted_count="$((deleted_count + object_count))"
+        echo "Deleted $deleted_count object versions/delete markers from s3://$bucket..."
         rm -f "$tmp"
       done
     EOT
@@ -431,6 +435,9 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "vpc_flow_logs" {
   bucket = aws_s3_bucket.vpc_flow_logs.id
 
   rule {
+    blocked_encryption_types = ["SSE-C"]
+    bucket_key_enabled       = false
+
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
     }
@@ -484,18 +491,22 @@ resource "aws_s3_bucket" "cloudtrail" {
       set -euo pipefail
       unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN AWS_PROFILE AWS_DEFAULT_PROFILE
       bucket="${self.bucket}"
+      deleted_count=0
 
       while true; do
         tmp="$(mktemp)"
-        aws s3api list-object-versions --bucket "$bucket" --output json \
+        aws s3api list-object-versions --bucket "$bucket" --max-items 1000 --output json \
           | jq '{Objects: (((.Versions // []) + (.DeleteMarkers // []))[:1000] | map({Key, VersionId})), Quiet: true}' > "$tmp"
+        object_count="$(jq '.Objects | length' "$tmp")"
 
-        if [ "$(jq '.Objects | length' "$tmp")" -eq 0 ]; then
+        if [ "$object_count" -eq 0 ]; then
           rm -f "$tmp"
           break
         fi
 
         aws s3api delete-objects --bucket "$bucket" --delete "file://$tmp" >/dev/null
+        deleted_count="$((deleted_count + object_count))"
+        echo "Deleted $deleted_count object versions/delete markers from s3://$bucket..."
         rm -f "$tmp"
       done
     EOT
@@ -521,6 +532,9 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
   bucket = aws_s3_bucket.cloudtrail.id
 
   rule {
+    blocked_encryption_types = ["SSE-C"]
+    bucket_key_enabled       = false
+
     apply_server_side_encryption_by_default {
       sse_algorithm = "AES256"
     }
