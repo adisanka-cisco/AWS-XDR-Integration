@@ -5,6 +5,7 @@
 - Documented the MVP boundary: Terraform manages AWS-side resources only, while Cisco Secure Cloud Analytics registration remains manual.
 - Clarified the required manual registration outputs: `role_arn`, `vpc_flow_log_s3_path`, and `cloudtrail_s3_path`.
 - Added a required-input checklist covering AWS CLI authentication, AWS permissions, region, `external_id`, VPCs, and S3 bucket names.
+- Added AWS CLI authentication examples for default access-key and AWS SSO workflows.
 - Documented `deploy.sh` import behavior, `python_consumer_outputs.json` generation, S3 lifecycle rules, and versioned bucket destroy expectations.
 - Clarified that `python_consumer_outputs.json` is generated in the repository root.
 - Improved repeat deploy idempotency by documenting and aligning S3 encryption configuration readback.

@@ -44,6 +44,37 @@ Before running `./deploy.sh`, have the following ready:
 
 `deploy.sh` intentionally clears `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_SESSION_TOKEN`, `AWS_PROFILE`, and `AWS_DEFAULT_PROFILE` before running. If you normally use a named AWS profile, authenticate or configure the default profile before using `deploy.sh`, or adapt the script for your environment.
 
+## Authenticate To AWS
+
+Use your organization's normal AWS login process, then verify the default AWS CLI session before running `./deploy.sh`.
+
+For access-key based environments:
+
+```bash
+aws configure
+aws sts get-caller-identity
+```
+
+For AWS SSO environments, configure and log in to the default profile:
+
+```bash
+aws configure sso
+aws sso login
+aws sts get-caller-identity
+```
+
+The identity check should return the target AWS account:
+
+```json
+{
+  "UserId": "AIDAEXAMPLE",
+  "Account": "123456789012",
+  "Arn": "arn:aws:iam::123456789012:user/example-user"
+}
+```
+
+Confirm `Account` is the AWS account you want to onboard before continuing.
+
 ## Values For Secure Cloud Analytics
 
 After `./deploy.sh` completes, copy these values into the Secure Cloud Analytics AWS integration UI:
@@ -70,7 +101,7 @@ terraform version
 aws --version
 ```
 
-6. Authenticate the AWS CLI using your organization's normal login process for the target account, then confirm the current terminal session has valid AWS access:
+6. Authenticate the AWS CLI for the target account, then confirm the current terminal session has valid AWS access:
 
 ```bash
 aws sts get-caller-identity
