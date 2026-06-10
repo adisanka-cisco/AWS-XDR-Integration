@@ -4,6 +4,8 @@ This Terraform project provisions the AWS resources required for a Cisco Secure 
 
 ## Overview
 
+This repository intentionally manages only the AWS-side infrastructure. Cisco Secure Cloud Analytics registration remains a manual UI step after Terraform finishes. The deployment does not call undocumented Cisco APIs.
+
 The configuration provisions:
 
 - An IAM role and policy that Cisco Secure Cloud Analytics can assume
@@ -14,12 +16,18 @@ The configuration provisions:
 - A KMS key and alias for CloudTrail encryption
 - A CloudTrail trail for management events
 
+After deployment, use these Terraform outputs for manual Cisco registration:
+
+- `role_arn`
+- `vpc_flow_log_s3_path`
+- `cloudtrail_s3_path`
+
 ## Files
 
 - `main.tf` contains Terraform resources, variables, and outputs.
 - `policies/` contains the default JSON policy templates applied to the IAM role, S3 buckets, and CloudTrail KMS key.
 - `terraform.tfvars` contains environment-specific values.
-- `deploy.sh` imports matching pre-existing AWS resources into Terraform state and then applies changes.
+- `deploy.sh` imports matching pre-existing AWS resources into Terraform state, applies changes, and prints `python_consumer_outputs.json`.
 
 ## Quick Start
 
@@ -45,7 +53,7 @@ aws sts get-caller-identity
 9. Run `./deploy.sh`.
 10. If `external_id` is blank in `terraform.tfvars`, `deploy.sh` will prompt for it in the terminal and use the value you enter for that run only.
 11. Wait about 5 minutes for fresh logs to land in S3 before trying the Cisco Secure Cloud Analytics integration.
-12. Use the console output or `python_consumer_outputs.json` when entering values in Cisco.
+12. Use `role_arn`, `vpc_flow_log_s3_path`, and `cloudtrail_s3_path` from the console output or `python_consumer_outputs.json` when entering values in Cisco.
 
 If `deploy.sh` is not executable in your local environment, run:
 
@@ -57,7 +65,7 @@ chmod +x deploy.sh
 
 `terraform.tfvars` is the main place for environment-specific settings and optional overrides. In many cases, the default values are enough and you may not need to change anything beyond the required `external_id`.
 
-You can also override the deployment region here by changing `aws_region`. The AWS provider in [main.tf](/Users/bqamar/work-dev/AWS-XDR-integration/main.tf) uses that value directly, so the deploy script and Terraform resource lookups will follow the region you set.
+You can also override the deployment region here by changing `aws_region`. The AWS provider in `main.tf` uses that value directly, so the deploy script and Terraform resource lookups will follow the region you set.
 
 Example optional overrides:
 
@@ -85,13 +93,15 @@ Required user input:
 
 - `external_id`
 
-Set `external_id` in [terraform.tfvars](/Users/bqamar/work-dev/AWS-XDR-integration/terraform.tfvars) to the customer's Secure Cloud Analytics org name. If you leave it blank and use [deploy.sh](/Users/bqamar/work-dev/AWS-XDR-integration/deploy.sh), the script will prompt for the value and use it only for that run.
+Set `external_id` in `terraform.tfvars` to the customer's Secure Cloud Analytics org name. If you leave it blank and use `deploy.sh`, the script will prompt for the value and use it only for that run.
 
 By default, Terraform discovers all VPCs visible to the configured AWS credentials in the target region and enables flow logs for up to 100 of them. All selected VPCs write to the same flow log bucket.
 
-If you want to use a specific subset instead, set `vpc_ids` in [terraform.tfvars](/Users/bqamar/work-dev/AWS-XDR-integration/terraform.tfvars). When `vpc_ids` is provided, Terraform uses exactly that list instead of the default discovery behavior. Single-VPC environments still work naturally because the discovered list may contain only one VPC.
+If you want to use a specific subset instead, set `vpc_ids` in `terraform.tfvars`. When `vpc_ids` is provided, Terraform uses exactly that list instead of the default discovery behavior. Single-VPC environments still work naturally because the discovered list may contain only one VPC.
 
-Policy customization in `v3` is file-based. The default policies live in `policies/`, and users can modify those checked-in JSON files directly when they need to adjust the permissions applied by Terraform.
+Policy customization is file-based. The default policies live in `policies/`, and users can modify those checked-in JSON files directly when they need to adjust the permissions applied by Terraform.
+
+Both S3 buckets have a lifecycle rule named by `lifecycle_rule_name`. The current rule expires only noncurrent object versions after 1 day; current log objects remain available until a separate current-object expiration rule is added.
 
 ## Prerequisites
 
@@ -114,9 +124,12 @@ From this directory, the recommended command is:
 `deploy.sh` will:
 
 - Run `terraform init`
-- Check AWS for matching pre-existing resources
+- Check AWS for matching pre-existing IAM, S3, KMS, CloudTrail, CloudWatch Logs, and VPC Flow Log resources
 - Import those resources into Terraform state when found
-- Create only the missing resources
+- Create only missing resources
+- Regenerate `python_consumer_outputs.json`
+
+The import checks use the names and region from `terraform.tfvars`. If resources already exist with different names, update `terraform.tfvars` before running the script.
 
 You can also run Terraform manually:
 
@@ -143,14 +156,13 @@ Running `./deploy.sh` gives you two output formats for the provisioned integrati
 - a console summary with the key Terraform outputs needed for Cisco Secure Cloud Analytics
 - a structured JSON file, `python_consumer_outputs.json`, for copy/paste or automation
 
-The console output includes values commonly needed in Cisco Secure Cloud Analytics, including:
+The required manual Cisco registration values are:
 
-- IAM role ARN
-- VPC Flow Logs bucket name
-- VPC Flow Log CloudWatch Logs group name
-- Selected VPC IDs
-- CloudTrail Logs bucket name
-- CloudTrail Logs bucket path
+- `role_arn`: IAM role ARN for Secure Cloud Analytics credentials
+- `vpc_flow_log_s3_path`: S3 path for VPC Flow Logs
+- `cloudtrail_s3_path`: S3 path for CloudTrail logs
+
+Additional outputs include the selected VPC IDs, CloudTrail bucket name, CloudTrail prefix, policy ARN, and the helper CloudWatch Logs group name used for Cisco-managed VPC Flow Log onboarding.
 
 The JSON file groups the same information into sections for:
 
@@ -193,6 +205,4 @@ To remove the provisioned resources:
 terraform destroy
 ```
 
-The S3 buckets are configured with `force_destroy = true`, so Terraform will
-remove bucket objects and versions during destroy instead of requiring manual
-bucket cleanup.
+The S3 buckets are configured with `force_destroy = true` and a destroy-time cleanup step for object versions/delete markers. Large versioned buckets can still take time to purge because S3 deletes are processed in batches of up to 1,000 versions/delete markers per request.

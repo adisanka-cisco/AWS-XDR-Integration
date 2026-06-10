@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- Documented the MVP boundary: Terraform manages AWS-side resources only, while Cisco Secure Cloud Analytics registration remains manual.
+- Clarified the required manual registration outputs: `role_arn`, `vpc_flow_log_s3_path`, and `cloudtrail_s3_path`.
+- Documented `deploy.sh` import behavior, `python_consumer_outputs.json` generation, S3 lifecycle rules, and versioned bucket destroy expectations.
+- Improved repeat deploy idempotency by documenting and aligning S3 encryption configuration readback.
+
 ## v4 - 2026-04-01
 
 - Changed VPC Flow Log selection to discover all accessible VPCs in the target region by default, with a cap of 100 VPCs.
